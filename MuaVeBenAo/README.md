@@ -2,6 +2,10 @@
 
 Game nông trại 3D thư giãn, làm bằng Godot 4 và GDScript, theo `Game_Nong_Trai_GDD.md` v0.1.
 
+**Chơi ngay trên trình duyệt:** https://trunghieu580.github.io/nong-trai-vui-ve/
+
+Mỗi lần đẩy code lên nhánh `main`, GitHub Actions tự chạy kiểm thử, xuất bản Web rồi cập nhật link trên sau khoảng 1–2 phút. Bản lỗi không được đăng. Tiến độ của mỗi người chơi được lưu trong trình duyệt của chính họ.
+
 ## Chạy game
 
 1. Cài **Godot 4.3 trở lên** (bản Standard, không cần bản .NET).
