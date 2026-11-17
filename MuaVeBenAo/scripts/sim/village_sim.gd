@@ -433,7 +433,7 @@ func _sell_to_customers(seller: String) -> void:
 			best_n = n
 	if best == "":
 		return
-	var want := 1 + (state.day + int(state.clock / 60.0)) % 3
+	var want: int = 1 + (int(state.day) + int(state.clock / 60.0)) % 3
 	var sold := GameRules.market_take(state, best, want)
 	if sold > 0 and seller != "":
 		GameRules.add_log(state, "%s bán %d %s cho khách." % [seller, sold, GameData.item_name(best).to_lower()])
@@ -447,7 +447,7 @@ func _do_fish(v: Dictionary, minutes: float) -> void:
 	v["work"] = float(v["work"]) + minutes
 	if float(v["work"]) >= 75.0:
 		v["work"] = float(v["work"]) - 75.0
-		var caught := 1 + (state.day + int(v["idx"])) % 2
+		var caught: int = 1 + (int(state.day) + int(v["idx"])) % 2
 		v["idx"] = int(v["idx"]) + 1
 		_carry_add(v, "fish_ro", caught)
 		GameRules.add_log(state, "%s câu được %d con cá rô." % [v["def"]["name"], caught])

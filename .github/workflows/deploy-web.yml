@@ -58,7 +58,17 @@ jobs:
         run: timeout 300 ~/godot/godot --headless --path "$PROJECT_DIR" --import
 
       - name: Run tests
-        run: timeout 120 ~/godot/godot --headless --path "$PROJECT_DIR" -s res://tests/run_tests.gd
+        run: |
+          timeout 300 ~/godot/godot --headless --path "$PROJECT_DIR" -s res://tests/run_tests.gd 2>&1 | tee tests.log
+          # Godot vẫn thoát mã 0 khi script lỗi biên dịch, nên kiểm tra thêm nội dung log.
+          if grep -E "SCRIPT ERROR|Parse Error|Compile Error" tests.log; then
+            echo "::error::Test scripts failed to compile"
+            exit 1
+          fi
+          if ! grep -E "Kết quả: [0-9]+ kiểm tra đạt, 0 lỗi" tests.log; then
+            echo "::error::Tests did not report 0 failures"
+            exit 1
+          fi
 
       - name: Smoke test main scene
         run: |
