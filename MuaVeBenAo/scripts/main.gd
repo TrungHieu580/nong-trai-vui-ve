@@ -9,6 +9,14 @@ const SaveSystem = preload("res://scripts/sim/save_system.gd")
 const Art = preload("res://scripts/world/art.gd")
 const PlayerScript = preload("res://scripts/world/player.gd")
 const GameUi = preload("res://scripts/ui/game_ui.gd")
+const VillageSim = preload("res://scripts/sim/village_sim.gd")
+const VD = preload("res://scripts/sim/village_data.gd")
+const VillagerView = preload("res://scripts/world/villager_view.gd")
+
+## Hàng rào làng (mở rộng cho cả xóm).
+const BOUND_X := 21.0
+const BOUND_Z_MIN := -13.6
+const BOUND_Z_MAX := 13.6
 
 const PLOT_ORIGIN := Vector3(-3.0, 0.0, -5.2)
 const PLOT_SPACING := 2.1
@@ -44,12 +52,26 @@ var fish_root: Node3D
 var ripple: MeshInstance3D
 var _time := 0.0
 
+# Xóm làng
+var village
+var villager_views := {}
+var buffalo: Node3D
+var paddy_roots: Array = []
+var paddy_stage_keys: Array = []
+var yard_chickens: Array = []
+var sun: DirectionalLight3D
+var env: Environment
+var _autosave_t := 0.0
+var _last_log := ""
+
 
 func _ready() -> void:
 	_setup_input()
 	_build_environment()
 	_build_world()
+	_build_village()
 	_spawn_player()
+	village = VillageSim.new(state)
 	ui = GameUi.new()
 	add_child(ui)
 	ui.setup(self)
@@ -122,9 +144,24 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	_time += delta
 	_animate()
+	_sync_village(delta)
 	if not in_game:
 		player.input_enabled = false
 		return
+	# Làng chạy liên tục, chỉ dừng khi đang ngủ hoặc mở menu tạm dừng.
+	if not busy and not ui.is_paused():
+		var ev: Dictionary = village.step(delta)
+		if ev["new_day"]:
+			_on_new_day()
+		_autosave_t += delta
+		if _autosave_t >= 20.0:
+			_autosave_t = 0.0
+			_save()
+	_apply_daylight()
+	ui.refresh_clock()
+	if not state.village_log.is_empty() and str(state.village_log.back()) != _last_log:
+		_last_log = str(state.village_log.back())
+		ui.refresh_news()
 	player.input_enabled = not busy and not ui.is_modal_open()
 	camera_rig.global_position = camera_rig.global_position.lerp(player.global_position, 1.0 - exp(-6.0 * delta))
 	_update_target()
@@ -136,6 +173,71 @@ func _process(delta: float) -> void:
 		_plot_tick = 0.0
 		for i in plot_nodes.size():
 			_refresh_plot(i)
+
+
+## Qua nửa đêm: vật nuôi lớn qua đêm, sang ngày mới.
+func _on_new_day() -> void:
+	var r: Dictionary = GameRules.sleep(state)
+	state = r["state"]
+	village.set_state(state)
+	refresh_all()
+	ui.toast("Đã sang ngày %d. Khuya rồi, về giường ngủ thôi!" % state.day, true)
+	_save()
+
+
+## Vẽ dân làng, trâu, ruộng lúa và gà theo trạng thái mô phỏng.
+func _sync_village(delta: float) -> void:
+	for v in village.villagers:
+		villager_views[v["id"]].sync(v, delta)
+	# Trâu đi theo Bác Ba khi cày, còn lại gặm cỏ ở bãi
+	var ba: Dictionary = village.get_villager("ba")
+	var target := Vector3(VD.SPOTS["pasture"].x, 0, VD.SPOTS["pasture"].y)
+	var face := Vector2(0, 1)
+	if ba["visible"] and (ba["task"] == "plow"):
+		var bp: Vector2 = ba["pos"] + Vector2(0, -1.6)
+		target = Vector3(bp.x, 0, bp.y)
+		face = ba["facing"]
+	buffalo.position = buffalo.position.lerp(target, minf(1.0, 1.5 * delta))
+	var moving := buffalo.position.distance_to(target) > 0.2
+	var dir := (target - buffalo.position)
+	if moving and dir.length() > 0.01:
+		face = Vector2(dir.x, dir.z).normalized()
+	buffalo.rotation.y = lerp_angle(buffalo.rotation.y, atan2(face.x, face.y), minf(1.0, 4.0 * delta))
+	buffalo.rotation.x = 0.0 if moving else sin(_time * 0.8) * 0.06
+	# Ruộng lúa: chỉ dựng lại khi đổi giai đoạn
+	for i in paddy_roots.size():
+		var p: Dictionary = state.paddies[i]
+		var frac := float(p["grow"]) / VD.PADDY_GROW_MINUTES
+		var key := "%s:%d" % [p["stage"], int(frac * 4.0) if p["stage"] == "growing" else 0]
+		if paddy_stage_keys[i] != key:
+			paddy_stage_keys[i] = key
+			var root: Node3D = paddy_roots[i]
+			for c in root.get_children():
+				c.queue_free()
+			root.add_child(Art.build_paddy(p["stage"], frac))
+	# Gà sân Bà Năm chạy lăng xăng
+	var yp: Vector2 = VD.SPOTS["yard"] + Vector2(0, 1.4)
+	for k in yard_chickens.size():
+		var t := _time * (0.5 + 0.15 * k) + k * 2.0
+		var ch: Node3D = yard_chickens[k]
+		ch.position = Vector3(yp.x + cos(t) * 1.0, absf(sin(_time * 7.0 + k)) * 0.04, yp.y + sin(t * 1.3) * 0.6)
+		ch.rotation.y = atan2(-sin(t), cos(t))
+
+
+## Ánh sáng theo giờ: sáng – trưa – hoàng hôn – đêm; tối thì đèn lồng và cửa sổ sáng.
+func _apply_daylight() -> void:
+	var h: float = state.clock / 60.0
+	var day := clampf(sin(PI * (h - 5.5) / 14.0), 0.0, 1.0)
+	sun.light_energy = 0.04 + 0.42 * day
+	sun.rotation_degrees.x = -lerpf(15.0, 70.0, day)
+	env.ambient_light_energy = 0.1 + 0.15 * day
+	var night_col := Color("6f84c6")
+	var dusk := clampf(1.0 - absf(h - 18.0) / 1.5, 0.0, 1.0) + clampf(1.0 - absf(h - 6.0) / 1.0, 0.0, 1.0) * 0.6
+	var light_col := night_col.lerp(Color.WHITE, day).lerp(Color("ffb07a"), dusk * 0.6)
+	sun.light_color = light_col
+	env.ambient_light_color = night_col.lerp(Color.WHITE, day)
+	env.background_color = Color("1c2440").lerp(Color("bfe3f2"), day).lerp(Color("f2a07a"), dusk * 0.5)
+	Art.glow_mat().emission_energy_multiplier = clampf(1.0 - day * 2.5, 0.0, 1.0) * 2.0
 
 
 ## Chạm/nhấp lên thế giới: chọn đối tượng gần điểm chạm, hoặc đi tới điểm đó.
@@ -150,7 +252,7 @@ func _on_tap(screen_pos: Vector2) -> void:
 	var hit := origin + dir * (-origin.y / dir.y)
 	var best: Dictionary = {}
 	var best_d := INF
-	for it in interactables:
+	for it in _all_targets():
 		var c: Vector3 = it["pos"]
 		var edge: float = it["edge"]
 		var d := Vector2(hit.x - c.x, hit.z - c.z).length()
@@ -177,7 +279,7 @@ func _on_tap(screen_pos: Vector2) -> void:
 func _do_pending() -> void:
 	var id := pending_id
 	pending_id = ""
-	for it in interactables:
+	for it in _all_targets():
 		if it["id"] != id:
 			continue
 		var c: Vector3 = it["pos"]
@@ -188,13 +290,23 @@ func _do_pending() -> void:
 		return
 
 
+## Đối tượng cố định + dân làng đang hiện (để bắt chuyện).
+func _all_targets() -> Array:
+	var out: Array = interactables.duplicate()
+	for v in village.villagers:
+		if v["visible"]:
+			var p: Vector2 = v["pos"]
+			out.append({"id": "npc:" + v["id"], "pos": Vector3(p.x, 0, p.y), "reach": 1.8, "edge": 0.25, "ring": 0.6})
+	return out
+
+
 ## Chỉ MỘT mục tiêu được chọn: gần nhất, ưu tiên thứ đang đứng đối diện (B01).
 func _update_target() -> void:
 	var best := ""
 	var best_score := INF
 	var best_item: Dictionary = {}
 	var ppos: Vector3 = player.global_position
-	for it in interactables:
+	for it in _all_targets():
 		var to: Vector3 = it["pos"] - ppos
 		to.y = 0.0
 		var dist := to.length()
@@ -241,7 +353,7 @@ func _animate() -> void:
 # ================= Dựng thế giới =================
 
 func _build_environment() -> void:
-	var env := Environment.new()
+	env = Environment.new()
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color("bfe3f2")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
@@ -254,7 +366,7 @@ func _build_environment() -> void:
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
-	var sun := DirectionalLight3D.new()
+	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-55, -35, 0)
 	sun.light_energy = 0.38
 	sun.light_color = Color("ffffff")
@@ -268,22 +380,25 @@ func _build_world() -> void:
 
 	# Mặt đất + va chạm
 	var ground_mesh := PlaneMesh.new()
-	ground_mesh.size = Vector2(60, 60)
+	ground_mesh.size = Vector2(80, 70)
 	add_child(Art.mesh(ground_mesh, Art.GRASS, Vector3.ZERO))
-	_add_collider(Vector3(0, -0.5, 0), Vector3(60, 1, 60))
-	for wall in [[Vector3(0, 1, -12.5), Vector3(30, 2, 0.5)], [Vector3(0, 1, 13.0), Vector3(30, 2, 0.5)],
-			[Vector3(-15, 1, 0), Vector3(0.5, 2, 26)], [Vector3(15, 1, 0), Vector3(0.5, 2, 26)]]:
+	_add_collider(Vector3(0, -0.5, 0), Vector3(80, 1, 70))
+	var w := BOUND_X * 2.0
+	var d := BOUND_Z_MAX - BOUND_Z_MIN
+	var zc := (BOUND_Z_MAX + BOUND_Z_MIN) * 0.5
+	for wall in [[Vector3(0, 1, BOUND_Z_MIN), Vector3(w, 2, 0.5)], [Vector3(0, 1, BOUND_Z_MAX), Vector3(w, 2, 0.5)],
+			[Vector3(-BOUND_X, 1, zc), Vector3(0.5, 2, d)], [Vector3(BOUND_X, 1, zc), Vector3(0.5, 2, d)]]:
 		_add_collider(wall[0], wall[1])
 
 	# Đường làng màu đất nung + mảng cỏ đậm
-	add_child(Art.box(Vector3(22, 0.03, 1.5), Art.PATH, Vector3(0, 0.015, -0.6)))
+	add_child(Art.box(Vector3(BOUND_X * 2.0 - 2.0, 0.03, 1.5), Art.PATH, Vector3(0, 0.015, VD.ROAD_Z)))
 	add_child(Art.box(Vector3(1.5, 0.03, 8), Art.PATH, Vector3(8.5, 0.015, 0.2)))
-	for gp in [Vector3(-12, 0, -4), Vector3(-3, 0, 9), Vector3(12, 0, 8), Vector3(3, 0, -10), Vector3(-11, 0, 9)]:
+	for gp in [Vector3(-12, 0, -4), Vector3(-3, 0, 9), Vector3(3, 0, -10), Vector3(7, 0, 9)]:
 		add_child(Art.cyl(2.2, 2.4, 0.02, Art.GRASS_DARK, gp + Vector3(0, 0.01, 0)))
 
 	# Hàng rào gỗ bao quanh làng
-	for fl in [[Vector3(0, 0, -12.5), 0.0, 30.0], [Vector3(0, 0, 13.0), 0.0, 30.0],
-			[Vector3(-15.0, 0, 0.25), 90.0, 25.5], [Vector3(15.0, 0, 0.25), 90.0, 25.5]]:
+	for fl in [[Vector3(0, 0, BOUND_Z_MIN), 0.0, w], [Vector3(0, 0, BOUND_Z_MAX), 0.0, w],
+			[Vector3(-BOUND_X, 0, zc), 90.0, d], [Vector3(BOUND_X, 0, zc), 90.0, d]]:
 		var fence := Art.build_fence_line(fl[2])
 		fence.position = fl[0]
 		fence.rotation_degrees.y = fl[1]
@@ -292,12 +407,13 @@ func _build_world() -> void:
 	# Hoa, bụi cây, đèn lồng, đá lát
 	for fp in [Vector3(-5.2, 0, -2.4), Vector3(3.2, 0, -2.0), Vector3(-10.5, 0, -2.3), Vector3(5.0, 0, 1.4),
 			Vector3(-4.5, 0, 1.6), Vector3(11.5, 0, 0.5), Vector3(-12.5, 0, 6.0), Vector3(3.5, 0, 9.5),
-			Vector3(9.5, 0, -8.8), Vector3(-6.0, 0, -10.5), Vector3(12.5, 0, 6.5), Vector3(-1.5, 0, 2.0)]:
+			Vector3(9.5, 0, -8.8), Vector3(-6.0, 0, -10.5), Vector3(11.5, 0, 10.0), Vector3(-1.5, 0, 2.0)]:
 		var fpatch := Art.build_flower_patch(rng)
 		fpatch.position = fp
 		add_child(fpatch)
-	for bp in [Vector3(-12.8, 0, -9.0), Vector3(-6.0, 0, -11.2), Vector3(1.0, 0, -11.0), Vector3(13.0, 0, -5.0),
-			Vector3(13.2, 0, 3.0), Vector3(-13.3, 0, 2.5), Vector3(-4.0, 0, 11.5), Vector3(6.5, 0, 11.3)]:
+	for bp in [Vector3(-12.8, 0, -9.0), Vector3(-6.0, 0, -11.2), Vector3(1.0, 0, -11.0), Vector3(10.0, 0, -11.5),
+			Vector3(12.6, 0, 3.0), Vector3(-13.3, 0, 2.5), Vector3(-4.0, 0, 11.5), Vector3(8.5, 0, 12.0),
+			Vector3(20.0, 0, 2.0), Vector3(-20.0, 0, 3.0), Vector3(19.5, 0, 12.5), Vector3(-20.0, 0, -12.8)]:
 		var bush := Art.build_bush(rng)
 		bush.position = bp
 		add_child(bush)
@@ -423,6 +539,80 @@ func _build_world() -> void:
 	highlight.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	highlight.visible = false
 	add_child(highlight)
+
+
+## Dựng xóm: nhà dân, ruộng lúa làng, ao làng, giếng, sân gà của Bà Năm, trâu, dân làng.
+func _build_village() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var built_houses := {}
+	for d in VD.VILLAGERS:
+		var hp: Vector2 = d["house"]
+		var key := "%d,%d" % [int(hp.x), int(hp.y)]
+		if built_houses.has(key) or not d.has("walls"):
+			continue
+		built_houses[key] = true
+		var house := Art.build_small_house(Color(d["walls"]), Color(d["roof"]), int(d["door"]))
+		house.position = Vector3(hp.x, 0, hp.y)
+		add_child(house)
+		_add_collider(Vector3(hp.x, 1.0, hp.y), Vector3(3.6, 2.0, 3.0))
+		var sign_z := hp.y + 2.3 * float(d["door"])
+		add_child(Art.label("Nhà %s" % d["name"], Vector3(hp.x, 3.6, hp.y), 30))
+		var path_len := absf(VD.ROAD_Z - sign_z)
+		if path_len > 1.0:
+			add_child(Art.box(Vector3(0.6, 0.025, path_len), Art.PATH.lightened(0.15),
+				Vector3(d["home"].x, 0.013, (VD.ROAD_Z + sign_z) * 0.5)))
+
+	# Ruộng lúa làng
+	add_child(Art.label("Ruộng lúa làng", Vector3(14.6, 2.2, -8.4), 34))
+	for c in VD.PADDY_CENTERS:
+		var root := Node3D.new()
+		root.position = Vector3(c.x, 0, c.y)
+		add_child(root)
+		paddy_roots.append(root)
+		paddy_stage_keys.append("")
+
+	# Bãi cỏ và con trâu
+	buffalo = Art.build_buffalo()
+	buffalo.position = Vector3(VD.SPOTS["pasture"].x, 0, VD.SPOTS["pasture"].y)
+	add_child(buffalo)
+
+	# Ao làng (Chú Tư câu cá)
+	var vp: Vector2 = VD.VILLAGE_POND
+	add_child(Art.cyl(VD.VILLAGE_POND_RADIUS + 0.3, VD.VILLAGE_POND_RADIUS + 0.3, 0.1, Color("c9b38a"), Vector3(vp.x, 0.03, vp.y)))
+	add_child(Art.cyl(VD.VILLAGE_POND_RADIUS, VD.VILLAGE_POND_RADIUS, 0.1, Art.WATER, Vector3(vp.x, 0.06, vp.y)))
+	for k in 5:
+		var a := TAU * float(k) / 5.0 + 0.5
+		add_child(Art.sphere(0.25, Art.LEAF, Vector3(vp.x + cos(a) * 1.3, 0.12, vp.y + sin(a) * 1.1), Vector3(1, 0.15, 1)))
+	_add_collider(Vector3(vp.x, 0.5, vp.y), Vector3.ZERO, VD.VILLAGE_POND_RADIUS)
+	add_child(Art.label("Ao làng", Vector3(vp.x, 1.4, vp.y), 30))
+
+	# Giếng làng
+	var well := Art.build_well()
+	var wp: Vector2 = VD.SPOTS["well"] + Vector2(0, -1.2)
+	well.position = Vector3(wp.x, 0, wp.y)
+	add_child(well)
+	_add_collider(Vector3(wp.x, 0.5, wp.y), Vector3.ZERO, 0.75)
+	add_child(Art.label("Giếng làng", Vector3(wp.x, 2.6, wp.y), 30))
+
+	# Sân gà của Bà Năm
+	var yard := Node3D.new()
+	var yp: Vector2 = VD.SPOTS["yard"] + Vector2(0, 1.4)
+	yard.position = Vector3(yp.x, 0, yp.y)
+	Art._fence(yard, 3.0, 2.0)
+	add_child(yard)
+	for k in 3:
+		var ch := Art.build_chicken()
+		ch.scale = Vector3.ONE * 0.8
+		add_child(ch)
+		yard_chickens.append(ch)
+
+	# Dân làng
+	for d in VD.VILLAGERS:
+		var view := VillagerView.new()
+		add_child(view)
+		view.setup(d)
+		villager_views[d["id"]] = view
 
 
 func _add_collider(pos: Vector3, size: Vector3, cyl_radius: float = 0.0) -> CollisionShape3D:
@@ -594,6 +784,9 @@ func _owned_seeds() -> Array:
 func describe_target(id: String) -> String:
 	if id == "":
 		return ""
+	if id.begins_with("npc:"):
+		var v: Dictionary = village.get_villager(id.substr(4))
+		return "[E] Chào %s – %s" % [v["def"]["name"], v["activity"]]
 	if id.begins_with("plot:"):
 		var plot: Dictionary = state.plots[int(id.substr(5))]
 		if plot["crop"] == "":
@@ -611,7 +804,7 @@ func describe_target(id: String) -> String:
 		return "%s đang lớn – còn %s" % [def["name"], GameData.fmt_time(GameRules.seconds_left(plot, t))]
 	match id:
 		"bed":
-			return "[E] Ngủ – kết thúc ngày %d" % state.day
+			return "[E] Đi ngủ tới 6 giờ sáng (bây giờ là %s)" % clock_text()
 		"market":
 			return "[E] Mở quầy chợ"
 		"coop":
@@ -657,6 +850,8 @@ func _pond_prompt() -> String:
 func action_verb(id: String) -> String:
 	if id == "":
 		return ""
+	if id.begins_with("npc:"):
+		return "Chào"
 	if id.begins_with("plot:"):
 		var plot: Dictionary = state.plots[int(id.substr(5))]
 		if plot["crop"] == "":
@@ -694,6 +889,12 @@ func interact_current() -> void:
 
 func interact(id: String) -> void:
 	if id == "" or busy:
+		return
+	if id.begins_with("npc:"):
+		var v: Dictionary = village.get_villager(id.substr(4))
+		if not v.is_empty():
+			player.play_action()
+			ui.toast("%s: \"%s\"" % [v["def"]["name"], village.talk(v)], true)
 		return
 	if id.begins_with("plot:"):
 		var i := int(id.substr(5))
@@ -773,13 +974,26 @@ func start_sleep() -> void:
 	pending_id = ""
 	ui.set_prompt("", "")
 	await ui.fade_out()
-	var r: Dictionary = GameRules.sleep(state)
-	state = r["state"]
+	# Ngủ tới 6 giờ sáng. Nếu đang trước nửa đêm thì sang ngày mới (vật nuôi lớn qua đêm);
+	# nếu đã qua nửa đêm (ngày đã sang rồi) thì chỉ ngủ tới sáng.
+	var msg := ""
+	var skipped := 0.0
+	if state.clock >= GameData.MORNING:
+		var r: Dictionary = GameRules.sleep(state)
+		skipped = 1440.0 - state.clock + GameData.MORNING
+		state = r["state"]
+		msg = r["msg"]
+	else:
+		skipped = GameData.MORNING - state.clock
+		msg = "Bạn ngủ một mạch tới sáng ngày %d." % state.day
+	state.clock = GameData.MORNING
+	village.set_state(state)
+	village.advance_offline(skipped)
 	_advance_tutorial("sleep")
 	_save()
 	refresh_all()
 	await ui.fade_in()
-	ui.show_summary(r["msg"], state.day)
+	ui.show_summary(msg + "\nCả xóm đã thức dậy, gà gáy rồi!", state.day)
 	busy = false
 
 
@@ -832,6 +1046,8 @@ func cycle_seed_by(step: int) -> void:
 
 func new_game() -> void:
 	state = FarmState.new()
+	village.set_state(state)
+	village.snap_all()
 	selected_seed = "seed_leafy_greens"
 	_place_player(SPAWN_POS)
 	in_game = true
@@ -846,6 +1062,8 @@ func continue_game() -> String:
 	if not r["ok"]:
 		return r["msg"]
 	state = r["state"]
+	village.set_state(state)
+	village.snap_all()
 	selected_seed = "seed_leafy_greens"
 	_place_player(Vector3(state.player_pos.x, 0.0, state.player_pos.y))
 	in_game = true
@@ -854,6 +1072,22 @@ func continue_game() -> String:
 	if r["msg"] != "":
 		ui.toast(r["msg"], false)
 	return ""
+
+
+## "06:30 · Sáng"
+func clock_text() -> String:
+	var m := int(state.clock)
+	var h := m / 60
+	var part := "Đêm"
+	if h >= 5 and h < 11:
+		part = "Sáng"
+	elif h >= 11 and h < 14:
+		part = "Trưa"
+	elif h >= 14 and h < 18:
+		part = "Chiều"
+	elif h >= 18 and h < 22:
+		part = "Tối"
+	return "%02d:%02d · %s" % [h, m % 60, part]
 
 
 func save_now() -> void:

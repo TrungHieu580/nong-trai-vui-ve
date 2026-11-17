@@ -474,12 +474,29 @@ static func build_bush(rng: RandomNumberGenerator) -> Node3D:
 	return r
 
 
+static var _glow: StandardMaterial3D
+
+
+## Vật liệu phát sáng dùng chung cho đèn lồng và cửa sổ; main đổi độ sáng theo giờ.
+static func glow_mat() -> StandardMaterial3D:
+	if _glow == null:
+		_glow = StandardMaterial3D.new()
+		_glow.albedo_color = Color("ffe08a")
+		_glow.emission_enabled = true
+		_glow.emission = Color("ffcf5a")
+		_glow.emission_energy_multiplier = 0.0
+		_glow.next_pass = outline_mat()
+	return _glow
+
+
 static func build_lantern() -> Node3D:
 	var r := Node3D.new()
 	r.add_child(box(Vector3(0.4, 0.12, 0.4), STONE, Vector3(0, 0.06, 0)))
 	r.add_child(cyl(0.05, 0.06, 0.9, DARK, Vector3(0, 0.55, 0)))
 	r.add_child(box(Vector3(0.26, 0.3, 0.26), DARK, Vector3(0, 1.1, 0)))
-	r.add_child(box(Vector3(0.2, 0.24, 0.27), Color("ffe08a"), Vector3(0, 1.1, 0)))
+	var glass := box(Vector3(0.2, 0.24, 0.27), Color("ffe08a"), Vector3(0, 1.1, 0))
+	glass.material_override = glow_mat()
+	r.add_child(glass)
 	r.add_child(prism(Vector3(0.36, 0.16, 0.36), DARK, Vector3(0, 1.33, 0)))
 	return r
 
@@ -489,6 +506,156 @@ static func build_stepping_stones(rng: RandomNumberGenerator, count: int) -> Nod
 	for k in count:
 		var p := Vector3(rng.randf_range(-0.9, 0.9), 0.02, rng.randf_range(-0.7, 0.7))
 		r.add_child(cyl(0.26, 0.28, 0.05, STONE, p, Vector3(0, rng.randf() * 90.0, 0)))
+	return r
+
+
+# ======================= Xóm làng =======================
+
+## Dân làng chibi, tuỳ biến bằng `look`: shirt, pants, hair, skin (mã màu) và hat
+## ("non_la" nón lá, "cap" mũ lưỡi trai, "bun" búi tóc, "pigtails" tóc hai bím, "" không).
+static func build_person(look: Dictionary) -> Node3D:
+	var r := Node3D.new()
+	var shirt := Color(look.get("shirt", "ffffff"))
+	var pants := Color(look.get("pants", "4a4a6a"))
+	var hair := Color(look.get("hair", "2b1d14"))
+	var skin := Color(look.get("skin", "f3cfa8"))
+	r.add_child(box(Vector3(0.15, 0.13, 0.22), Color("6b4a33"), Vector3(-0.1, 0.065, 0.03)))
+	r.add_child(box(Vector3(0.15, 0.13, 0.22), Color("6b4a33"), Vector3(0.1, 0.065, 0.03)))
+	r.add_child(cyl(0.07, 0.075, 0.24, pants, Vector3(-0.1, 0.24, 0)))
+	r.add_child(cyl(0.07, 0.075, 0.24, pants, Vector3(0.1, 0.24, 0)))
+	r.add_child(cyl(0.2, 0.25, 0.42, shirt, Vector3(0, 0.56, 0)))
+	r.add_child(capsule(0.07, 0.34, shirt, Vector3(-0.26, 0.6, 0), Vector3(0, 0, 16)))
+	r.add_child(capsule(0.07, 0.34, shirt, Vector3(0.26, 0.6, 0), Vector3(0, 0, -16)))
+	r.add_child(sphere(0.065, skin, Vector3(-0.3, 0.42, 0)))
+	r.add_child(sphere(0.065, skin, Vector3(0.3, 0.42, 0)))
+	r.add_child(sphere(0.34, skin, Vector3(0, 1.08, 0)))
+	r.add_child(sphere(0.36, hair, Vector3(0, 1.13, -0.08)))
+	r.add_child(sphere(0.22, hair, Vector3(0, 1.3, 0.14), Vector3(1.45, 0.5, 1.0)))
+	r.add_child(sphere(0.042, DARK, Vector3(-0.11, 1.07, 0.31), Vector3(1, 1.3, 0.6)))
+	r.add_child(sphere(0.042, DARK, Vector3(0.11, 1.07, 0.31), Vector3(1, 1.3, 0.6)))
+	r.add_child(sphere(0.055, PINK, Vector3(-0.19, 0.98, 0.26), Vector3(1.2, 0.6, 0.5)))
+	r.add_child(sphere(0.055, PINK, Vector3(0.19, 0.98, 0.26), Vector3(1.2, 0.6, 0.5)))
+	r.add_child(box(Vector3(0.07, 0.02, 0.02), Color("a0523a"), Vector3(0, 0.95, 0.33)))
+	match str(look.get("hat", "")):
+		"non_la":
+			r.add_child(cyl(0.02, 0.6, 0.32, STRAW, Vector3(0, 1.52, 0)))
+			r.add_child(cyl(0.57, 0.57, 0.02, Color("d9b45a"), Vector3(0, 1.37, 0)))
+		"cap":
+			r.add_child(sphere(0.33, Color("4f6d8f"), Vector3(0, 1.22, 0), Vector3(1.05, 0.7, 1.05)))
+			r.add_child(box(Vector3(0.36, 0.03, 0.26), Color("3f5a78"), Vector3(0, 1.2, 0.38)))
+		"bun":
+			r.add_child(sphere(0.15, hair, Vector3(0, 1.5, -0.12)))
+		"pigtails":
+			r.add_child(sphere(0.12, hair, Vector3(-0.34, 1.12, -0.05)))
+			r.add_child(sphere(0.12, hair, Vector3(0.34, 1.12, -0.05)))
+			r.add_child(sphere(0.045, Color("f28b82"), Vector3(-0.3, 1.2, 0.02)))
+			r.add_child(sphere(0.045, Color("f28b82"), Vector3(0.3, 1.2, 0.02)))
+	return r
+
+
+## Dụng cụ cầm tay theo việc đang làm (gắn vào người, phía trước bên phải).
+static func build_tool(kind: String) -> Node3D:
+	var r := Node3D.new()
+	match kind:
+		"hoe":
+			r.add_child(cyl(0.025, 0.025, 1.0, WOOD, Vector3(0.32, 0.6, 0.18), Vector3(35, 0, 0)))
+			r.add_child(box(Vector3(0.16, 0.04, 0.2), STONE.darkened(0.3), Vector3(0.32, 0.2, 0.47)))
+		"basket":
+			r.add_child(cyl(0.18, 0.13, 0.18, STRAW, Vector3(0.34, 0.42, 0.12)))
+			r.add_child(cyl(0.15, 0.15, 0.02, LEAF, Vector3(0.34, 0.52, 0.12)))
+		"can":
+			r.add_child(cyl(0.11, 0.12, 0.2, Color("7fb3d5"), Vector3(0.34, 0.42, 0.14)))
+			r.add_child(cyl(0.02, 0.03, 0.26, Color("7fb3d5"), Vector3(0.34, 0.47, 0.32), Vector3(70, 0, 0)))
+		"sickle":
+			r.add_child(cyl(0.02, 0.02, 0.22, WOOD, Vector3(0.32, 0.45, 0.16)))
+			r.add_child(torus_arc(Vector3(0.32, 0.6, 0.2)))
+		"rod":
+			r.add_child(cyl(0.015, 0.025, 1.8, WOOD, Vector3(0.3, 1.0, 0.75), Vector3(60, 0, 0)))
+			r.add_child(cyl(0.004, 0.004, 1.2, Color("f5f5f5"), Vector3(0.3, 1.05, 1.55)))
+			r.add_child(sphere(0.04, Color("e2574c"), Vector3(0.3, 0.45, 1.58)))
+	return r
+
+
+static func torus_arc(pos: Vector3) -> MeshInstance3D:
+	var m := TorusMesh.new()
+	m.inner_radius = 0.1
+	m.outer_radius = 0.13
+	return mesh(m, Color("cfd8dc"), pos, Vector3(90, 0, 0), Vector3(1, 1, 0.5))
+
+
+## Nhà nhỏ của dân làng; door = +1 cửa nhìn về +Z, -1 nhìn về -Z.
+static func build_small_house(walls: Color, roof: Color, door: int) -> Node3D:
+	var r := Node3D.new()
+	r.add_child(box(Vector3(3.6, 2.0, 3.0), walls, Vector3(0, 1.0, 0)))
+	r.add_child(prism(Vector3(4.1, 1.3, 3.5), roof, Vector3(0, 2.65, 0), Vector3(0, 90, 0)))
+	var z := 1.52 * door
+	r.add_child(box(Vector3(0.8, 1.4, 0.06), WOOD, Vector3(0.6, 0.7, z)))
+	var win := box(Vector3(0.7, 0.6, 0.06), Color("ffe08a"), Vector3(-0.8, 1.2, z))
+	win.material_override = glow_mat()
+	r.add_child(win)
+	r.add_child(box(Vector3(3.8, 0.2, 3.2), Color("c8b48c"), Vector3(0, 0.1, 0)))
+	# Lu nước và chậu cây trước nhà
+	r.add_child(cyl(0.22, 0.28, 0.45, Color("a0523a"), Vector3(1.5, 0.22, z + 0.5 * door)))
+	r.add_child(sphere(0.25, LEAF, Vector3(-1.5, 0.3, z + 0.4 * door)))
+	return r
+
+
+static func build_buffalo() -> Node3D:
+	var r := Node3D.new()
+	var hide := Color("5b5f66")
+	r.add_child(box(Vector3(0.85, 0.75, 1.5), hide, Vector3(0, 0.85, 0)))
+	for x in [-0.28, 0.28]:
+		for z in [-0.5, 0.5]:
+			r.add_child(box(Vector3(0.18, 0.5, 0.18), hide.darkened(0.15), Vector3(x, 0.25, z)))
+	r.add_child(box(Vector3(0.55, 0.5, 0.55), hide, Vector3(0, 1.0, 0.95)))
+	r.add_child(box(Vector3(0.5, 0.25, 0.22), Color("8a8f96"), Vector3(0, 0.86, 1.25)))
+	r.add_child(sphere(0.045, DARK, Vector3(-0.16, 1.1, 1.22)))
+	r.add_child(sphere(0.045, DARK, Vector3(0.16, 1.1, 1.22)))
+	# Sừng cong lưỡi liềm đặc trưng của trâu
+	r.add_child(cyl(0.03, 0.06, 0.5, Color("e8e2d0"), Vector3(-0.42, 1.3, 0.85), Vector3(0, 0, 65)))
+	r.add_child(cyl(0.03, 0.06, 0.5, Color("e8e2d0"), Vector3(0.42, 1.3, 0.85), Vector3(0, 0, -65)))
+	r.add_child(cyl(0.02, 0.02, 0.45, hide, Vector3(0, 0.85, -0.85), Vector3(25, 0, 0)))
+	return r
+
+
+static func build_well() -> Node3D:
+	var r := Node3D.new()
+	r.add_child(cyl(0.7, 0.75, 0.7, STONE, Vector3(0, 0.35, 0)))
+	r.add_child(cyl(0.55, 0.55, 0.05, Color("4f7fa8"), Vector3(0, 0.66, 0)))
+	for x in [-0.75, 0.75]:
+		r.add_child(cyl(0.05, 0.05, 1.5, WOOD_DARK, Vector3(x, 1.0, 0)))
+	r.add_child(prism(Vector3(1.8, 0.45, 1.2), ROOF, Vector3(0, 1.95, 0), Vector3(0, 90, 0)))
+	r.add_child(cyl(0.12, 0.1, 0.18, WOOD, Vector3(0.2, 1.1, 0)))
+	return r
+
+
+## Một thửa ruộng lúa theo giai đoạn: bare, plowed, planted, growing, ripe.
+static func build_paddy(stage: String, frac: float) -> Node3D:
+	var r := Node3D.new()
+	var soil := SOIL_DRY
+	if stage == "plowed":
+		soil = SOIL_WET
+	r.add_child(box(Vector3(2.3, 0.18, 2.3), Color("8d6443"), Vector3(0, 0.09, 0)))
+	r.add_child(box(Vector3(2.1, 0.2, 2.1), soil, Vector3(0, 0.1, 0)))
+	if stage == "plowed":
+		for k in 4:
+			r.add_child(box(Vector3(1.9, 0.05, 0.08), SOIL_WET.darkened(0.3), Vector3(0, 0.21, -0.75 + k * 0.5)))
+	if stage in ["planted", "growing", "ripe"]:
+		r.add_child(box(Vector3(2.1, 0.03, 2.1), Color("9fd3e3"), Vector3(0, 0.215, 0)))
+		var h := 0.12
+		var col := Color("8fd16a")
+		if stage == "growing":
+			h = lerpf(0.15, 0.55, clampf(frac, 0.0, 1.0))
+			col = LEAF
+		elif stage == "ripe":
+			h = 0.6
+			col = Color("e8c872")
+		for i in 3:
+			for j in 3:
+				var p := Vector3(-0.65 + i * 0.65, 0.22, -0.65 + j * 0.65)
+				r.add_child(cyl(0.02, 0.09, h, col, p + Vector3(0, h * 0.5, 0)))
+				if stage == "ripe":
+					r.add_child(capsule(0.04, 0.18, Color("d9a93a"), p + Vector3(0.06, h, 0), Vector3(0, 0, -40)))
 	return r
 
 

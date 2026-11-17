@@ -39,6 +39,9 @@ var tutorial_panel: PanelContainer
 var tutorial_label: Label
 var key_hint: Label
 var fade: ColorRect
+var news_panel: PanelContainer
+var news_labels: Array = []
+var market_demand: Label
 
 var market_wrap: Control
 var market_coin_label: Label
@@ -354,6 +357,25 @@ func _build_hud() -> void:
 	profile.add_child(pv)
 	hud.add_child(profile)
 
+	# --- Bảng tin làng (dưới ảnh đại diện) ---
+	news_panel = PanelContainer.new()
+	news_panel.position = Vector2(16, 100)
+	news_panel.custom_minimum_size = Vector2(340, 0)
+	news_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	news_panel.add_theme_stylebox_override("panel", _box(Color("fffaf0dd"), INK, 2, 14, 2))
+	var nv := VBoxContainer.new()
+	nv.add_theme_constant_override("separation", 1)
+	nv.add_child(_label("Tin làng", 15))
+	for k in 3:
+		var nl := _label("", 13)
+		nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		nl.custom_minimum_size.x = 316
+		nl.modulate.a = 1.0 - 0.25 * k
+		nv.add_child(nl)
+		news_labels.append(nl)
+	news_panel.add_child(nv)
+	hud.add_child(news_panel)
+
 	# --- Góc trên phải: xu + hạt đang cầm + menu ---
 	var top_right := HBoxContainer.new()
 	top_right.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -505,9 +527,8 @@ func refresh() -> void:
 	if main == null:
 		return
 	var st = main.state
-	day_label.text = "Ngày %d" % st.day
-	day_bar.max_value = 7
-	day_bar.value = ((st.day - 1) % 7) + 1
+	refresh_clock()
+	refresh_news()
 	coin_label.text = str(st.coins)
 	var seed_id: String = main.seed_in_hand()
 	seed_pill_icon.set_icon(seed_id)
@@ -524,6 +545,25 @@ func refresh() -> void:
 			tutorial_label.text = GameData.TUTORIAL_DONE_TEXT
 		if not DisplayServer.is_touchscreen_available():
 			tutorial_label.text += "\n[H] Ẩn"
+
+
+## Ngày + giờ trên thanh dưới tên nông trại; thanh chạy theo giờ trong ngày.
+func refresh_clock() -> void:
+	day_label.text = "Ngày %d · %s" % [main.state.day, main.clock_text()]
+	day_bar.max_value = 1440.0
+	day_bar.value = main.state.clock
+
+
+func refresh_news() -> void:
+	var lines: Array = main.state.village_log
+	for k in news_labels.size():
+		var idx := lines.size() - 1 - k
+		(news_labels[k] as Label).text = str(lines[idx]) if idx >= 0 else ""
+	news_panel.visible = not lines.is_empty()
+
+
+func is_paused() -> bool:
+	return _modal == pause_wrap
 
 
 func set_prompt(text: String, verb: String) -> void:
@@ -617,6 +657,9 @@ func _build_market() -> void:
 	ch.add_child(ItemIcon.new("coin", 30.0))
 	coin_pill.add_child(ch)
 	v.add_child(_header("Quầy chợ làng", coin_pill))
+	market_demand = _label("", 16)
+	market_demand.add_theme_color_override("font_color", Color("b8661a"))
+	v.add_child(market_demand)
 
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 8)
@@ -711,6 +754,8 @@ func _switch_tab(key: String) -> void:
 func _rebuild_market(keep_id: String) -> void:
 	var st = main.state
 	market_coin_label.text = str(st.coins)
+	market_demand.text = "★ Hôm nay chợ đang cần: %s (giá +30%%). Hàng về chợ càng nhiều thì giá càng hạ." % \
+		GameData.item_name(GameRules.demand_item(st.day))
 	_clear(market_grid)
 	var group := ButtonGroup.new()
 	var entries: Array = []
@@ -725,7 +770,7 @@ func _rebuild_market(keep_id: String) -> void:
 			keys.sort()
 			for id in keys:
 				if GameData.sell_price(id) > 0:
-					entries.append(["sell", id, id, GameData.item_name(id), str(GameData.sell_price(id)), "×%d" % st.count(id)])
+					entries.append(["sell", id, id, GameData.item_name(id), str(GameRules.market_price(st, id)), "×%d" % st.count(id)])
 		"build":
 			for b in GameData.BUILDING_ORDER:
 				var bdef: Dictionary = GameData.BUILDINGS[b]
@@ -777,13 +822,22 @@ func _update_detail() -> void:
 	match _sel_kind:
 		"buy", "sell":
 			var is_buy := _sel_kind == "buy"
-			var price := GameData.buy_price(_sel_id) if is_buy else GameData.sell_price(_sel_id)
+			var price: int = GameData.buy_price(_sel_id) if is_buy else GameRules.market_price(st, _sel_id)
 			var have: int = st.count(_sel_id)
 			_qty = maxi(1, _qty) if is_buy else clampi(_qty, 1, maxi(1, have))
 			detail_icon.set_icon(_sel_id)
 			detail_name.text = GameData.item_name(_sel_id)
 			detail_desc.text = GameData.item_desc(_sel_id) + "\nĐang có: %d" % have
 			detail_price.text = "Giá: %d xu / món" % price
+			if not is_buy and GameRules.is_market_good(_sel_id):
+				var base := GameData.sell_price(_sel_id)
+				var tag := ""
+				if price > base:
+					tag = " ▲ chợ đang cần"
+				elif price < base:
+					tag = " ▼ chợ đang thừa"
+				detail_price.text = "Giá chợ: %d xu (gốc %d)%s\nChợ đang tồn: %d" % [
+					price, base, tag, int(st.market_stock.get(_sel_id, 0))]
 			qty_row.visible = true
 			qty_label.text = str(_qty)
 			var total := price * _qty

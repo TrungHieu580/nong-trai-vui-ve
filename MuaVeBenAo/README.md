@@ -6,6 +6,24 @@ Game nông trại 3D thư giãn, làm bằng Godot 4 và GDScript, theo `Game_No
 
 Mỗi lần đẩy code lên nhánh `main`, GitHub Actions tự chạy kiểm thử, xuất bản Web rồi cập nhật link trên sau khoảng 1–2 phút. Bản lỗi không được đăng. Tiến độ của mỗi người chơi được lưu trong trình duyệt của chính họ.
 
+## Xóm làng tự vận hành
+
+Một ngày trong game dài khoảng 8 phút thật, có sáng, trưa, chiều, tối. Ban đêm đèn lồng và cửa sổ nhà dân sáng lên. Dân làng tự làm việc theo lịch:
+
+| Nhân vật | Công việc |
+|---|---|
+| Bác Ba | Ra ruộng lúa làng cùng con trâu: cày, cấy mạ, dẫn nước, gặt lúa, chiều gánh lúa ra chợ bán |
+| Cô Lan | Đứng quầy chợ, mỗi giờ bán cho khách những món chợ đang tồn nhiều |
+| Chú Tư | Câu cá ở ao làng, trưa và chiều mang cá ra chợ |
+| Bà Năm | Cho gà ăn, sáng nhặt trứng mang ra chợ, trưa ra giếng hóng mát |
+| Bé Bin, Bé Na | Chạy chơi khắp xóm: giếng làng, ao, đầu ruộng |
+
+**Chợ có giá lên xuống**: mỗi món đang tồn ở chợ làm giá giảm 3%, thấp nhất còn một nửa giá gốc. Cô Lan bán bớt hàng thì giá hồi lại. Mỗi ngày chợ "đang cần" một mặt hàng và trả giá cao hơn 30%. Lúa của Bác Ba về chợ nhiều nên lúa thường rẻ.
+
+Chạm vào dân làng (hoặc nhấn E khi đứng gần) để trò chuyện. Bảng **Tin làng** ở góc trái báo những việc vừa xảy ra. Giường dùng để ngủ tới 6 giờ sáng hôm sau. Nếu không đi ngủ, qua nửa đêm game vẫn tự sang ngày mới.
+
+Logic mô phỏng nằm ở `scripts/sim/village_sim.gd` (không phụ thuộc hình ảnh). Lịch, địa điểm và lời thoại nằm ở `scripts/sim/village_data.gd`.
+
 ## Cây trồng (thời gian thực)
 
 Gieo hạt rồi tưới một lần. Từ lúc tưới, cây lớn theo đồng hồ thật, kể cả khi đã đóng game. Cây càng lâu chín thì mỗi vụ càng lãi.
