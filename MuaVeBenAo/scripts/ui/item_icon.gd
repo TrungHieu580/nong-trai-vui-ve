@@ -256,4 +256,4 @@ func _bag() -> void:
 
 func _menu() -> void:
 	for y in [0.3, 0.5, 0.7]:
-		_line(0.22, y, 0.78, y, Color("fff6e0"), 0.09)
+		_line(0.2, y, 0.8, y, Color("3b2a20"), 0.11)

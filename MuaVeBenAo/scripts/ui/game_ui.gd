@@ -388,7 +388,8 @@ func _build_hud() -> void:
 	menu_b.focus_mode = Control.FOCUS_NONE
 	menu_b.pressed.connect(_on_menu_button)
 	var mi = ItemIcon.new("menu", 34.0)
-	mi.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	mi.size = Vector2(34, 34)
+	mi.position = Vector2(11, 7)
 	menu_b.add_child(mi)
 	top_right.add_child(menu_b)
 	hud.add_child(top_right)
