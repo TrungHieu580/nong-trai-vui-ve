@@ -2,6 +2,7 @@ extends Control
 ## Biểu tượng vẽ bằng code: vật phẩm, đồng xu, ảnh đại diện, công trình.
 ## Muốn đẹp hơn có thể thay bằng ảnh PNG mà không đổi chỗ gọi.
 
+const GameData = preload("res://scripts/sim/game_data.gd")
 const OUT := Color("5a3a1e")
 
 var icon_id := ""
@@ -24,19 +25,18 @@ func _draw() -> void:
 	var side := minf(size.x, size.y)
 	_s = side
 	_o = (size - Vector2(side, side)) * 0.5
+	if icon_id == "seed_leafy_greens_gift":
+		_seed_packet("leafy_greens", true)
+		return
+	if icon_id.begins_with("seed_") and GameData.SEED_TO_CROP.has(icon_id):
+		_seed_packet(GameData.SEED_TO_CROP[icon_id], false)
+		return
+	if icon_id.begins_with("produce_"):
+		_produce(icon_id.substr(8), 0.0)
+		return
 	match icon_id:
 		"coin":
 			_coin()
-		"seed_leafy_greens":
-			_packet("leafy")
-		"seed_leafy_greens_gift":
-			_packet("gift")
-		"seed_carrot":
-			_packet("carrot")
-		"produce_leafy_greens":
-			_cabbage()
-		"produce_carrot":
-			_carrot()
 		"egg":
 			_egg()
 		"milk":
@@ -109,24 +109,94 @@ func _coin() -> void:
 	_ellipse(0.37, 0.34, 0.08, 0.05, Color("fff6c4"), -0.6)
 
 
-func _packet(mark: String) -> void:
+## Gói hạt giống: giấy kraft + hình nông sản thu nhỏ in trên gói.
+func _seed_packet(crop_id: String, gift: bool) -> void:
 	_poly([Vector2(0.18, 0.1), Vector2(0.82, 0.1), Vector2(0.86, 0.92), Vector2(0.14, 0.92)], OUT)
 	_poly([Vector2(0.22, 0.14), Vector2(0.78, 0.14), Vector2(0.81, 0.88), Vector2(0.19, 0.88)], Color("f7e6bf"))
 	_rect(0.22, 0.14, 0.56, 0.13, Color("d9a35e"))
-	match mark:
+	# Vẽ nông sản thu nhỏ 55% ở nửa dưới gói
+	var keep_s := _s
+	var keep_o := _o
+	_o = _o + Vector2(0.22, 0.3) * _s
+	_s = _s * 0.56
+	_produce(crop_id, 0.0)
+	_s = keep_s
+	_o = keep_o
+	if gift:
+		_rect(0.46, 0.14, 0.08, 0.74, Color("e2574c"))
+		_circle(0.43, 0.2, 0.06, Color("e2574c"))
+		_circle(0.57, 0.2, 0.06, Color("e2574c"))
+
+
+## Biểu tượng nông sản theo từng loại cây.
+func _produce(crop_id: String, _unused: float) -> void:
+	if not GameData.CROPS.has(crop_id):
+		return
+	var c := Color(GameData.CROPS[crop_id]["color"])
+	match crop_id:
+		"water_spinach":
+			for k in 4:
+				_line(0.3 + k * 0.12, 0.88, 0.36 + k * 0.08, 0.3, Color("6fae4f"), 0.05)
+			_ellipse(0.38, 0.3, 0.14, 0.08, c, -0.5)
+			_ellipse(0.62, 0.28, 0.14, 0.08, c, 0.5)
+			_ellipse(0.5, 0.2, 0.1, 0.13, c.lightened(0.2))
+			_rect(0.34, 0.64, 0.34, 0.08, Color("c9a074"))
+		"leafy_greens":
+			_cabbage()
 		"carrot":
-			_poly([Vector2(0.37, 0.47), Vector2(0.63, 0.47), Vector2(0.5, 0.82)], Color("f08a24"))
-			_line(0.5, 0.47, 0.42, 0.34, Color("3f8a2c"), 0.05)
-			_line(0.5, 0.47, 0.5, 0.32, Color("4caf50"), 0.05)
-			_line(0.5, 0.47, 0.58, 0.34, Color("3f8a2c"), 0.05)
+			_carrot()
+		"cucumber":
+			_ellipse(0.5, 0.52, 0.17, 0.4, OUT, 0.5)
+			_ellipse(0.5, 0.52, 0.14, 0.37, c, 0.5)
+			for p in [Vector2(0.45, 0.35), Vector2(0.55, 0.55), Vector2(0.6, 0.7), Vector2(0.4, 0.55)]:
+				_circle(p.x, p.y, 0.02, c.lightened(0.4))
+		"tomato", "pumpkin":
+			_circle(0.5, 0.56, 0.36, OUT)
+			_circle(0.5, 0.56, 0.33, c)
+			if crop_id == "pumpkin":
+				_ellipse(0.38, 0.56, 0.06, 0.3, c.darkened(0.12))
+				_ellipse(0.62, 0.56, 0.06, 0.3, c.darkened(0.12))
+				_rect(0.46, 0.12, 0.08, 0.14, Color("8d6443"))
+			else:
+				_poly([Vector2(0.5, 0.22), Vector2(0.62, 0.3), Vector2(0.5, 0.28), Vector2(0.38, 0.3)], Color("3f8a2c"))
+				_circle(0.5, 0.25, 0.05, Color("3f8a2c"))
+			_ellipse(0.38, 0.44, 0.08, 0.05, Color(1, 1, 1, 0.4), -0.5)
+		"watermelon":
+			_circle(0.5, 0.55, 0.38, OUT)
+			_circle(0.5, 0.55, 0.35, c)
+			for k in 4:
+				_ellipse(0.27 + k * 0.15, 0.55, 0.035, 0.32, c.darkened(0.35))
+			_ellipse(0.38, 0.42, 0.08, 0.05, Color(1, 1, 1, 0.3), -0.5)
+		"corn":
+			_ellipse(0.5, 0.5, 0.17, 0.36, OUT, 0.35)
+			_ellipse(0.5, 0.5, 0.14, 0.33, c, 0.35)
+			for k in 4:
+				_line(0.41 + k * 0.04, 0.24 + k * 0.02, 0.52 + k * 0.04, 0.76 - k * 0.02, c.darkened(0.15), 0.015)
+			_poly([Vector2(0.62, 0.86), Vector2(0.3, 0.5), Vector2(0.48, 0.62)], Color("6fae4f"))
+			_poly([Vector2(0.62, 0.86), Vector2(0.78, 0.4), Vector2(0.64, 0.62)], Color("5aa244"))
+		"chili":
+			_poly([Vector2(0.36, 0.2), Vector2(0.5, 0.22), Vector2(0.68, 0.6), Vector2(0.62, 0.88), Vector2(0.52, 0.6)], OUT)
+			_poly([Vector2(0.38, 0.24), Vector2(0.48, 0.26), Vector2(0.64, 0.6), Vector2(0.61, 0.82), Vector2(0.53, 0.58)], c)
+			_line(0.43, 0.22, 0.38, 0.1, Color("3f8a2c"), 0.05)
+		"peanut":
+			_circle(0.42, 0.38, 0.2, OUT)
+			_circle(0.58, 0.64, 0.2, OUT)
+			_circle(0.42, 0.38, 0.17, c)
+			_circle(0.58, 0.64, 0.17, c)
+			_ellipse(0.5, 0.51, 0.12, 0.1, c)
+			for p in [Vector2(0.38, 0.34), Vector2(0.46, 0.42), Vector2(0.55, 0.6), Vector2(0.62, 0.68)]:
+				_circle(p.x, p.y, 0.02, c.darkened(0.25))
+		"sweet_potato":
+			_ellipse(0.5, 0.55, 0.38, 0.22, OUT, -0.4)
+			_ellipse(0.5, 0.55, 0.35, 0.19, c, -0.4)
+			_line(0.32, 0.6, 0.42, 0.58, c.darkened(0.3), 0.02)
+			_line(0.55, 0.5, 0.65, 0.47, c.darkened(0.3), 0.02)
+		"rice":
+			_sack(c)
+			for k in 3:
+				_line(0.38 + k * 0.12, 0.3, 0.42 + k * 0.1, 0.06, Color("c9a54e"), 0.035)
 		_:
-			_circle(0.5, 0.6, 0.19, Color("3f8a2c"))
-			_circle(0.5, 0.6, 0.15, Color("63b443"))
-			_circle(0.46, 0.56, 0.07, Color("9be07f"))
-			if mark == "gift":
-				_rect(0.46, 0.14, 0.08, 0.74, Color("e2574c"))
-				_circle(0.43, 0.2, 0.06, Color("e2574c"))
-				_circle(0.57, 0.2, 0.06, Color("e2574c"))
+			_circle(0.5, 0.55, 0.3, c)
 
 
 func _cabbage() -> void:

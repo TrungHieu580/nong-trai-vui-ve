@@ -215,35 +215,120 @@ static func build_fish() -> Node3D:
 
 # ================= Cây trồng =================
 
-static func build_crop(root: Node3D, crop_id: String, growth: int, nights: int) -> void:
-	if growth <= 0:
+## Dựng cây theo kiểu (shape) và màu nông sản trong GameData.CROPS.
+## t: tỷ lệ lớn 0..1 (1 = chín).
+static func build_crop(root: Node3D, crop_id: String, shape: String, fruit: Color, t: float) -> void:
+	if t <= 0.02:
 		root.add_child(sphere(0.2, SOIL_WET, Vector3(0, 0.0, 0), Vector3(1, 0.35, 1)))
 		root.add_child(sphere(0.06, LEAF, Vector3(0, 0.1, 0)))
 		return
-	var t := clampf(float(growth) / float(nights), 0.0, 1.0)
-	var ripe := growth >= nights
-	if crop_id == "leafy_greens":
-		var r := lerpf(0.14, 0.3, t)
-		var count := 5 if ripe else 3
-		for k in count:
-			var a := TAU * float(k) / float(count)
-			var off := Vector3(cos(a), 0, sin(a)) * r * 0.7
-			root.add_child(sphere(r, LEAF if k % 2 == 0 else LEAF_DARK, off + Vector3(0, r * 0.5, 0), Vector3(1, 0.55, 1)))
-		var head := r * 0.85
-		root.add_child(sphere(head, Color("a5dc85"), Vector3(0, r * 0.9, 0), Vector3(1, 0.9, 1)))
-		if ripe:
-			_face(root, Vector3(0, r * 0.95, head * 0.88), 0.07)
+	var ripe := t >= 1.0
+	match shape:
+		"leafy":
+			_crop_leafy(root, fruit, t, ripe)
+		"root":
+			_crop_root(root, fruit, t, ripe)
+		"bush":
+			_crop_bush(root, fruit, t, ripe)
+		"vine":
+			_crop_vine(root, fruit, t, ripe)
+		"tall":
+			_crop_tall(root, fruit, t, ripe, crop_id == "rice")
+		"big":
+			_crop_big(root, fruit, t, ripe, crop_id == "watermelon")
+
+
+static func _crop_leafy(root: Node3D, c: Color, t: float, ripe: bool) -> void:
+	var r := lerpf(0.14, 0.3, t)
+	var count := 5 if ripe else 3
+	for k in count:
+		var a := TAU * float(k) / float(count)
+		var off := Vector3(cos(a), 0, sin(a)) * r * 0.7
+		root.add_child(sphere(r, c if k % 2 == 0 else c.darkened(0.15), off + Vector3(0, r * 0.5, 0), Vector3(1, 0.55, 1)))
+	var head := r * 0.85
+	root.add_child(sphere(head, c.lightened(0.3), Vector3(0, r * 0.9, 0), Vector3(1, 0.9, 1)))
+	if ripe:
+		_face(root, Vector3(0, r * 0.95, head * 0.88), 0.07)
+
+
+static func _leaves(root: Node3D, base_y: float, h: float, n: int) -> void:
+	for k in n:
+		var a := TAU * float(k) / float(n)
+		root.add_child(cyl(0.015, 0.06, h, LEAF, Vector3(cos(a) * 0.06, base_y + h * 0.5, sin(a) * 0.06),
+			Vector3(rad_to_deg(sin(a)) * 0.35, 0, -rad_to_deg(cos(a)) * 0.35)))
+
+
+static func _crop_root(root: Node3D, c: Color, t: float, ripe: bool) -> void:
+	var h := lerpf(0.2, 0.5, t)
+	if ripe:
+		root.add_child(sphere(0.21, c, Vector3(0, 0.16, 0), Vector3(1, 1.05, 1)))
+		root.add_child(cyl(0.08, 0.0, 0.18, c, Vector3(0, -0.02, 0)))
+		_leaves(root, 0.32, h, 4)
+		_face(root, Vector3(0, 0.19, 0.19), 0.07)
 	else:
-		var h := lerpf(0.2, 0.5, t)
-		var base_y := 0.32 if ripe else 0.0
-		for k in 4:
-			var a := TAU * float(k) / 4.0
-			root.add_child(cyl(0.015, 0.06, h, LEAF, Vector3(cos(a) * 0.06, base_y + h * 0.5, sin(a) * 0.06),
-				Vector3(rad_to_deg(sin(a)) * 0.35, 0, -rad_to_deg(cos(a)) * 0.35)))
+		_leaves(root, 0.0, h, 4)
+
+
+static func _crop_bush(root: Node3D, c: Color, t: float, ripe: bool) -> void:
+	var s := lerpf(0.5, 1.0, t)
+	root.add_child(sphere(0.3 * s, LEAF_DARK, Vector3(0, 0.3 * s, 0)))
+	root.add_child(sphere(0.22 * s, LEAF, Vector3(0.12, 0.42 * s, 0.05)))
+	root.add_child(sphere(0.2 * s, LEAF, Vector3(-0.13, 0.38 * s, 0.04)))
+	if t > 0.6:
+		var fr := 0.07 if not ripe else 0.09
+		var col := c if ripe else LEAF.lightened(0.2)
+		for p in [Vector3(0.18, 0.35, 0.2), Vector3(-0.17, 0.3, 0.2), Vector3(0.02, 0.5, 0.22), Vector3(0.22, 0.2, -0.1)]:
+			root.add_child(sphere(fr, col, p * s + Vector3(0, 0.05, 0)))
+	if ripe:
+		root.add_child(sphere(0.13, c, Vector3(0, 0.3, 0.27)))
+		_face(root, Vector3(0, 0.31, 0.39), 0.045)
+
+
+static func _crop_vine(root: Node3D, c: Color, t: float, ripe: bool) -> void:
+	var h := lerpf(0.3, 0.75, t)
+	for x in [-0.25, 0.25]:
+		root.add_child(cyl(0.02, 0.02, h + 0.2, WOOD, Vector3(x, (h + 0.2) * 0.5, -0.1)))
+	root.add_child(box(Vector3(0.55, 0.02, 0.02), WOOD, Vector3(0, h + 0.18, -0.1)))
+	for k in 4:
+		var y := h * (0.25 + 0.22 * k)
+		root.add_child(sphere(0.13, LEAF if k % 2 == 0 else LEAF_DARK, Vector3(-0.12 + 0.08 * k, y, -0.05), Vector3(1.2, 0.7, 0.6)))
+	if ripe:
+		root.add_child(capsule(0.09, 0.4, c, Vector3(0.0, 0.32, 0.12), Vector3(0, 0, 10)))
+		root.add_child(capsule(0.07, 0.3, c.darkened(0.1), Vector3(0.2, 0.42, 0.05), Vector3(0, 0, -15)))
+		_face(root, Vector3(0.015, 0.35, 0.21), 0.04)
+
+
+static func _crop_tall(root: Node3D, c: Color, t: float, ripe: bool, is_rice: bool) -> void:
+	var h := lerpf(0.3, 0.95, t)
+	var stems := 6 if is_rice else 2
+	for k in stems:
+		var off := Vector3(-0.2 + 0.4 * float(k) / maxf(1.0, stems - 1.0), 0, 0.05 * (k % 2))
+		var stalk := c if (ripe and is_rice) else LEAF
+		root.add_child(cyl(0.02, 0.035, h, stalk, off + Vector3(0, h * 0.5, 0), Vector3(0, 0, 6 - 4 * k)))
+		if not is_rice:
+			root.add_child(box(Vector3(0.35, 0.02, 0.08), LEAF_DARK, off + Vector3(0.1, h * 0.5, 0), Vector3(0, 0, -25)))
 		if ripe:
-			root.add_child(sphere(0.21, CARROT, Vector3(0, 0.16, 0), Vector3(1, 1.05, 1)))
-			root.add_child(cyl(0.08, 0.0, 0.18, CARROT, Vector3(0, -0.02, 0)))
-			_face(root, Vector3(0, 0.19, 0.19), 0.07)
+			if is_rice:
+				root.add_child(capsule(0.035, 0.18, c.darkened(0.05), off + Vector3(0.04, h + 0.02, 0), Vector3(0, 0, -35)))
+			else:
+				root.add_child(capsule(0.07, 0.28, c, off + Vector3(0.06, h * 0.65, 0.05), Vector3(0, 0, -20)))
+	if ripe and not is_rice:
+		_face(root, Vector3(-0.13, h * 0.65 + 0.02, 0.13), 0.035)
+
+
+static func _crop_big(root: Node3D, c: Color, t: float, ripe: bool, striped: bool) -> void:
+	for k in 4:
+		var a := TAU * float(k) / 4.0 + 0.4
+		root.add_child(sphere(0.16, LEAF_DARK, Vector3(cos(a) * 0.32, 0.06, sin(a) * 0.32), Vector3(1.2, 0.35, 1.2)))
+	var r := lerpf(0.06, 0.32, t)
+	var col := c if t > 0.5 else LEAF.lightened(0.15)
+	root.add_child(sphere(r, col, Vector3(0, r * 0.85, 0.05), Vector3(1.1, 0.9, 1.0)))
+	if striped and t > 0.5:
+		for k in 3:
+			root.add_child(box(Vector3(0.03, r * 1.5, r * 2.05), LEAF_DARK.darkened(0.2), Vector3(-r * 0.5 + r * 0.5 * k, r * 0.85, 0.05)))
+	if ripe:
+		root.add_child(cyl(0.02, 0.03, 0.12, WOOD_DARK, Vector3(0, r * 1.7, 0.05)))
+		_face(root, Vector3(0, r * 0.9, r + 0.03), 0.09)
 
 
 ## Mặt cười dễ thương cho cây đã chín (nhìn về phía camera, +Z).

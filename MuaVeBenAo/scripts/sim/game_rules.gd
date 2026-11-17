@@ -17,12 +17,34 @@ static func _valid_qty(qty) -> bool:
 	return typeof(qty) == TYPE_INT and qty > 0
 
 
-# ================= Ruộng =================
+# ================= Ruộng (thời gian thực) =================
 
-static func is_ripe(plot: Dictionary) -> bool:
-	if plot["crop"] == "":
-		return false
-	return int(plot["growth"]) >= int(GameData.CROPS[plot["crop"]]["nights"])
+static func now() -> float:
+	return Time.get_unix_time_from_system()
+
+
+static func is_watered(plot: Dictionary) -> bool:
+	return plot["crop"] != "" and float(plot["watered_at"]) > 0.0
+
+
+## Tỷ lệ lớn 0..1. Chưa tưới thì 0.
+static func growth_fraction(plot: Dictionary, t: float) -> float:
+	if not is_watered(plot):
+		return 0.0
+	var total := float(GameData.CROPS[plot["crop"]]["seconds"])
+	return clampf((t - float(plot["watered_at"])) / total, 0.0, 1.0)
+
+
+## Số giây còn lại tới khi chín (0 nếu đã chín hoặc chưa tưới).
+static func seconds_left(plot: Dictionary, t: float) -> float:
+	if not is_watered(plot):
+		return 0.0
+	var total := float(GameData.CROPS[plot["crop"]]["seconds"])
+	return maxf(0.0, float(plot["watered_at"]) + total - t)
+
+
+static func is_ripe(plot: Dictionary, t: float) -> bool:
+	return is_watered(plot) and growth_fraction(plot, t) >= 1.0
 
 
 static func sow(s, i: int, seed_id: String) -> Dictionary:
@@ -38,39 +60,42 @@ static func sow(s, i: int, seed_id: String) -> Dictionary:
 	s.remove_item(seed_id, 1)
 	var crop_id: String = GameData.SEED_TO_CROP[seed_id]
 	plot["crop"] = crop_id
-	plot["growth"] = 0
-	plot["watered"] = false
+	plot["watered_at"] = 0.0
 	return _ok("Đã gieo %s. Nhớ tưới nhé!" % GameData.CROPS[crop_id]["name"])
 
 
-static func water(s, i: int) -> Dictionary:
+## Tưới một lần: cây bắt đầu lớn từ thời điểm `t`.
+static func water(s, i: int, t: float) -> Dictionary:
 	if i < 0 or i >= s.plots.size():
 		return _fail("Ô ruộng không hợp lệ.")
 	var plot: Dictionary = s.plots[i]
 	if plot["crop"] == "":
 		return _fail("Ô trống, chưa cần tưới.")
-	if is_ripe(plot):
-		return _fail("Cây đã chín, hãy thu hoạch.")
-	if plot["watered"]:
-		return _fail("Ô này đã được tưới hôm nay.")
-	plot["watered"] = true
-	return _ok("Đã tưới %s." % GameData.CROPS[plot["crop"]]["name"])
+	if is_watered(plot):
+		if is_ripe(plot, t):
+			return _fail("Cây đã chín, hãy thu hoạch.")
+		return _fail("Đã tưới rồi, cây đang lớn.")
+	plot["watered_at"] = t
+	var def: Dictionary = GameData.CROPS[plot["crop"]]
+	return _ok("Đã tưới %s. Chín sau %s." % [def["name"], GameData.fmt_duration(int(def["seconds"]))])
 
 
-static func harvest(s, i: int) -> Dictionary:
+static func harvest(s, i: int, t: float) -> Dictionary:
 	if i < 0 or i >= s.plots.size():
 		return _fail("Ô ruộng không hợp lệ.")
 	var plot: Dictionary = s.plots[i]
-	if not is_ripe(plot):
+	if not is_ripe(plot, t):
 		return _fail("Cây chưa chín.")
-	var def: Dictionary = GameData.CROPS[plot["crop"]]
-	s.add_item(def["product"], int(def["yield"]))
+	var crop_id: String = plot["crop"]
+	var def: Dictionary = GameData.CROPS[crop_id]
+	var product := "produce_" + crop_id
+	s.add_item(product, int(def["yield"]))
 	s.plots[i] = _empty_plot()
-	return _ok("Thu được %d %s." % [def["yield"], GameData.item_name(def["product"]).to_lower()])
+	return _ok("Thu được %d %s." % [def["yield"], GameData.item_name(product).to_lower()])
 
 
 static func _empty_plot() -> Dictionary:
-	return {"crop": "", "growth": 0, "watered": false}
+	return {"crop": "", "watered_at": 0.0}
 
 
 # ================= Gà / bò =================
@@ -247,18 +272,9 @@ static func claim_free_seed(s) -> Dictionary:
 ## Trả về {"ok", "state": trạng thái mới, "msg": tóm tắt}.
 static func sleep(s) -> Dictionary:
 	var n = s.duplicate_state()
-	var grown := 0
-	var ripened := 0
 	var products: Array[String] = []
 	var cared: Array[String] = []
-
-	for plot in n.plots:
-		if plot["crop"] != "" and not is_ripe(plot) and plot["watered"]:
-			plot["growth"] = int(plot["growth"]) + 1
-			grown += 1
-			if is_ripe(plot):
-				ripened += 1
-		plot["watered"] = false
+	# Cây trồng lớn theo thời gian thực nên không đổi khi ngủ.
 
 	if n.buildings["pond"] and n.pond["stocked"] and n.pond["fed"] and not pond_ready(n):
 		n.pond["growth"] = int(n.pond["growth"]) + 1
@@ -281,12 +297,10 @@ static func sleep(s) -> Dictionary:
 	n.day += 1
 
 	var lines: Array[String] = ["Ngày %d bắt đầu." % n.day]
-	if grown > 0:
-		lines.append("Cây lớn thêm: %d ô (%d ô đã chín)." % [grown, ripened])
-	else:
-		lines.append("Không ô ruộng nào lớn thêm – nhớ tưới trước khi ngủ.")
 	if products.size() > 0:
 		lines.append("Sản phẩm mới: " + ", ".join(products) + ".")
 	if cared.size() > 0:
 		lines.append("Đã được chăm: " + ", ".join(cared) + ".")
+	if products.is_empty() and cared.is_empty():
+		lines.append("Vật nuôi lớn qua đêm khi được cho ăn. Cây trồng thì lớn theo đồng hồ, không cần ngủ.")
 	return {"ok": true, "state": n, "msg": "\n".join(lines)}

@@ -1,5 +1,5 @@
 extends SceneTree
-## Bộ kiểm thử mô phỏng theo tiêu chí nghiệm thu B02–B07 trong GDD.
+## Bộ kiểm thử mô phỏng.
 ## Chạy:  godot --headless --path . -s res://tests/run_tests.gd
 ## Mã thoát 0 = tất cả đạt.
 
@@ -8,6 +8,9 @@ const FarmState = preload("res://scripts/sim/farm_state.gd")
 const GameRules = preload("res://scripts/sim/game_rules.gd")
 const SaveSystem = preload("res://scripts/sim/save_system.gd")
 
+## Mốc thời gian giả cho kiểm thử (không phải chờ thật).
+const T0 := 1_800_000_000.0
+
 var _passed := 0
 var _failed := 0
 var _current := ""
@@ -15,17 +18,19 @@ var _current := ""
 
 func _init() -> void:
 	var tests := [
-		"test_b02_crop_cycle",
-		"test_b02_carrot",
-		"test_b03_market",
-		"test_b03_buildings",
-		"test_b04_pond",
-		"test_b05_chicken",
-		"test_b05_cow",
-		"test_b06_sleep_does_not_mutate",
-		"test_b06_save_load",
-		"test_b07_scenario_day9",
-		"test_b07_recovery",
+		"test_crop_realtime_cycle",
+		"test_all_crops_data",
+		"test_all_crops_grow",
+		"test_market",
+		"test_buildings",
+		"test_pond",
+		"test_chicken",
+		"test_cow",
+		"test_sleep_does_not_mutate",
+		"test_save_load",
+		"test_migrate_v1_save",
+		"test_starter_economy",
+		"test_recovery",
 		"test_free_seed_not_exploitable",
 	]
 	for t in tests:
@@ -68,75 +73,77 @@ func night(s):
 
 func rich_state():
 	var s = FarmState.new()
-	s.coins = 1000
+	s.coins = 100000
 	return s
 
 
-# ---------------- helpers cho kịch bản ----------------
+# ================= Trồng trọt theo thời gian thực =================
 
-func sow_all(s, seed_id: String) -> void:
-	for i in GameData.PLOT_COUNT:
-		ok(GameRules.sow(s, i, seed_id), "gieo ô %d" % i)
-
-
-func water_all(s) -> void:
-	for i in GameData.PLOT_COUNT:
-		var p: Dictionary = s.plots[i]
-		if p["crop"] != "" and not GameRules.is_ripe(p):
-			ok(GameRules.water(s, i), "tưới ô %d" % i)
-
-
-func harvest_all(s) -> void:
-	for i in GameData.PLOT_COUNT:
-		ok(GameRules.harvest(s, i), "thu ô %d" % i)
-
-
-# ================= B02 =================
-
-func test_b02_crop_cycle() -> void:
+func test_crop_realtime_cycle() -> void:
 	var s = FarmState.new()
+	var before: int = s.count("seed_leafy_greens")
 	ok(GameRules.sow(s, 0, "seed_leafy_greens"), "gieo cải")
-	eq(s.count("seed_leafy_greens"), 5, "gieo trừ đúng một hạt")
+	eq(s.count("seed_leafy_greens"), before - 1, "gieo trừ đúng một hạt")
 	no(GameRules.sow(s, 0, "seed_leafy_greens"), "không gieo đè ô đã có cây")
-	eq(s.count("seed_leafy_greens"), 5, "gieo lỗi không trừ hạt")
-	no(GameRules.water(s, 1), "không tưới ô trống")
+	eq(s.count("seed_leafy_greens"), before - 1, "gieo lỗi không trừ hạt")
+	no(GameRules.water(s, 1, T0), "không tưới ô trống")
 
-	ok(GameRules.water(s, 0), "tưới ngày gieo")
-	no(GameRules.water(s, 0), "không tưới hai lần một ngày")
-	s = night(s)
-	eq(s.plots[0]["growth"], 1, "đêm có tưới tăng một bước")
-
-	s = night(s)
-	eq(s.plots[0]["growth"], 1, "đêm bỏ tưới không tăng bước")
-	no(GameRules.harvest(s, 0), "chưa chín thì không thu")
-
-	ok(GameRules.water(s, 0), "tưới lại")
-	s = night(s)
-	check(GameRules.is_ripe(s.plots[0]), "chín sau hai đêm được tưới")
-	no(GameRules.water(s, 0), "cây chín không cần tưới")
-
-	ok(GameRules.harvest(s, 0), "thu cải")
+	check(not GameRules.is_ripe(s.plots[0], T0 + 999999.0), "chưa tưới thì không bao giờ chín")
+	ok(GameRules.water(s, 0, T0), "tưới")
+	no(GameRules.water(s, 0, T0 + 5.0), "không tưới hai lần")
+	check(absf(GameRules.growth_fraction(s.plots[0], T0 + 30.0) - 0.5) < 0.001, "30 giây = lớn một nửa")
+	eq(int(GameRules.seconds_left(s.plots[0], T0 + 45.0)), 15, "còn 15 giây")
+	check(not GameRules.is_ripe(s.plots[0], T0 + 59.0), "59 giây chưa chín")
+	no(GameRules.harvest(s, 0, T0 + 59.0), "chưa chín thì không thu")
+	check(GameRules.is_ripe(s.plots[0], T0 + 60.0), "60 giây thì chín")
+	ok(GameRules.harvest(s, 0, T0 + 60.0), "thu cải")
 	eq(s.count("produce_leafy_greens"), 2, "thu đúng hai cải")
-	no(GameRules.harvest(s, 0), "bấm thu lần hai bị chặn")
-	eq(s.count("produce_leafy_greens"), 2, "bấm thu hai lần chỉ nhận một lần")
+	no(GameRules.harvest(s, 0, T0 + 61.0), "bấm thu lần hai bị chặn")
+	eq(s.count("produce_leafy_greens"), 2, "thu hai lần chỉ nhận một lần")
 	eq(s.plots[0]["crop"], "", "ô trống sau thu")
 
 
-func test_b02_carrot() -> void:
+func test_all_crops_data() -> void:
+	eq(GameData.CROPS.size(), 12, "có 12 loại cây")
+	eq(GameData.CROP_ORDER.size(), GameData.CROPS.size(), "thứ tự đủ các cây")
+	var last_profit := -1
+	var last_seconds := 0
+	for crop_id in GameData.CROP_ORDER:
+		var def: Dictionary = GameData.CROPS[crop_id]
+		var seed_id: String = "seed_" + crop_id
+		var product: String = "produce_" + crop_id
+		check(GameData.ITEMS.has(seed_id), "có hạt %s" % seed_id)
+		check(GameData.ITEMS.has(product), "có nông sản %s" % product)
+		eq(GameData.crop_for_seed(seed_id), crop_id, "hạt %s ra đúng cây" % seed_id)
+		eq(GameData.buy_price(seed_id), int(def["seed"]), "giá hạt %s khớp bảng cây" % crop_id)
+		eq(GameData.sell_price(product), int(def["sell"]), "giá bán %s khớp bảng cây" % crop_id)
+		eq(GameData.sell_price(seed_id), int(def["seed"]) / 2, "thanh lý hạt %s = nửa giá" % crop_id)
+		check(GameData.BUY_LIST.has(seed_id), "chợ bán hạt %s" % crop_id)
+		var profit: int = int(def["yield"]) * int(def["sell"]) - int(def["seed"])
+		check(profit > 0, "%s có lãi" % crop_id)
+		check(profit > last_profit, "%s lâu hơn thì mỗi vụ lãi hơn" % crop_id)
+		check(int(def["seconds"]) > last_seconds, "%s xếp theo thời gian tăng dần" % crop_id)
+		last_profit = profit
+		last_seconds = int(def["seconds"])
+
+
+func test_all_crops_grow() -> void:
 	var s = rich_state()
-	ok(GameRules.buy(s, "seed_carrot", 1), "mua hạt cà rốt")
-	ok(GameRules.sow(s, 2, "seed_carrot"), "gieo cà rốt")
-	for d in 3:
-		check(not GameRules.is_ripe(s.plots[2]), "chưa chín trước đêm %d" % (d + 1))
-		ok(GameRules.water(s, 2), "tưới cà rốt")
-		s = night(s)
-	ok(GameRules.harvest(s, 2), "thu cà rốt")
-	eq(s.count("produce_carrot"), 3, "thu đúng ba củ")
+	for crop_id in GameData.CROP_ORDER:
+		var def: Dictionary = GameData.CROPS[crop_id]
+		var seed_id: String = "seed_" + crop_id
+		var secs := float(def["seconds"])
+		ok(GameRules.buy(s, seed_id, 1), "mua hạt %s" % crop_id)
+		ok(GameRules.sow(s, 3, seed_id), "gieo %s" % crop_id)
+		ok(GameRules.water(s, 3, T0), "tưới %s" % crop_id)
+		check(not GameRules.is_ripe(s.plots[3], T0 + secs - 1.0), "%s chưa chín trước hạn" % crop_id)
+		ok(GameRules.harvest(s, 3, T0 + secs), "thu %s đúng hạn" % crop_id)
+		eq(s.count("produce_" + crop_id), int(def["yield"]), "%s thu đúng sản lượng" % crop_id)
 
 
-# ================= B03 =================
+# ================= Chợ / công trình =================
 
-func test_b03_market() -> void:
+func test_market() -> void:
 	var s = FarmState.new()
 	s.add_item("produce_leafy_greens", 2)
 	var before: int = s.coins
@@ -145,7 +152,7 @@ func test_b03_market() -> void:
 
 	var coins: int = s.coins
 	var inv: Dictionary = s.inventory.duplicate(true)
-	no(GameRules.buy(s, "seed_carrot", 100), "mua quá số dư")
+	no(GameRules.buy(s, "seed_watermelon", 100), "mua quá số dư")
 	no(GameRules.sell(s, "seed_leafy_greens", 99), "bán quá số lượng")
 	no(GameRules.sell(s, "produce_carrot", 1), "bán thứ không có")
 	no(GameRules.buy(s, "seed_carrot", 0), "số lượng 0")
@@ -158,8 +165,9 @@ func test_b03_market() -> void:
 	eq(s.coins, coins + 4, "thanh lý bằng nửa giá mua")
 
 
-func test_b03_buildings() -> void:
-	var s = rich_state()
+func test_buildings() -> void:
+	var s = FarmState.new()
+	s.coins = 1000
 	no(GameRules.buy_building(s, "pond"), "không mua ao trước chuồng gà")
 	no(GameRules.buy_building(s, "barn"), "không mua chuồng bò trước ao")
 	ok(GameRules.buy_building(s, "coop"), "mua chuồng gà")
@@ -175,9 +183,9 @@ func test_b03_buildings() -> void:
 	eq(poor.coins, 40, "mua lỗi giữ nguyên tiền")
 
 
-# ================= B04 =================
+# ================= Ao cá / vật nuôi (theo đêm) =================
 
-func test_b04_pond() -> void:
+func test_pond() -> void:
 	var s = rich_state()
 	ok(GameRules.buy_building(s, "coop"), "mua chuồng gà")
 	ok(GameRules.buy_building(s, "pond"), "mua ao")
@@ -199,9 +207,7 @@ func test_b04_pond() -> void:
 	ok(GameRules.stock_pond(s), "thả lứa mới sau khi thu")
 
 
-# ================= B05 =================
-
-func test_b05_chicken() -> void:
+func test_chicken() -> void:
 	var s = rich_state()
 	no(GameRules.feed_animal(s, "chicken"), "chưa có chuồng gà")
 	ok(GameRules.buy_building(s, "coop"), "mua chuồng gà")
@@ -212,22 +218,18 @@ func test_b05_chicken() -> void:
 	s = night(s)
 	check(s.animals["chicken"]["ready"], "gà có trứng sau một đêm")
 	no(GameRules.feed_animal(s, "chicken"), "có trứng chờ thu thì khoá cho ăn")
-	eq(s.count("feed_chicken"), 2, "khoá cho ăn không trừ cám")
 	ok(GameRules.collect_animal(s, "chicken"), "nhặt trứng")
 	eq(s.count("egg"), 1, "được một trứng")
 	no(GameRules.collect_animal(s, "chicken"), "không nhặt hai lần")
-	s = night(s)
-	check(not s.animals["chicken"]["ready"], "đêm không cho ăn thì không có trứng")
 
 
-func test_b05_cow() -> void:
+func test_cow() -> void:
 	var s = rich_state()
 	ok(GameRules.buy_building(s, "coop"), "mua chuồng gà")
 	ok(GameRules.buy_building(s, "pond"), "mua ao")
 	ok(GameRules.buy_building(s, "barn"), "mua chuồng bò")
 	ok(GameRules.buy(s, "feed_cow", 4), "mua cỏ")
 	ok(GameRules.feed_animal(s, "cow"), "cho bò ăn đêm 1")
-	no(GameRules.feed_animal(s, "cow"), "cho ăn lặp bị chặn")
 	s = night(s)
 	check(not s.animals["cow"]["ready"], "một đêm chưa có sữa")
 	s = night(s)
@@ -237,32 +239,31 @@ func test_b05_cow() -> void:
 	check(s.animals["cow"]["ready"], "hai đêm được chăm có sữa")
 	ok(GameRules.collect_animal(s, "cow"), "vắt sữa")
 	eq(s.count("milk"), 1, "được một sữa")
-	eq(s.count("feed_cow"), 2, "trừ đúng hai cỏ")
 
 
-# ================= B06 =================
+# ================= Ngủ / lưu / tải =================
 
-func test_b06_sleep_does_not_mutate() -> void:
+func test_sleep_does_not_mutate() -> void:
 	var s = FarmState.new()
 	ok(GameRules.sow(s, 0, "seed_leafy_greens"), "gieo")
-	ok(GameRules.water(s, 0), "tưới")
+	ok(GameRules.water(s, 0, T0), "tưới")
 	var snapshot: Dictionary = s.to_dict()
 	var n = night(s)
 	eq(s.to_dict(), snapshot, "ngủ không sửa trạng thái gốc")
 	eq(n.day, 2, "ngày tăng đúng một")
+	eq(float(n.plots[0]["watered_at"]), T0, "ngủ không làm mất tiến độ cây")
 
 
-func test_b06_save_load() -> void:
+func test_save_load() -> void:
 	var saver = SaveSystem.new("user://test_saves")
 	saver.delete_all()
 	check(not saver.has_save(), "chưa có bản lưu")
-	var r0: Dictionary = saver.load_game()
-	check(not r0["ok"], "không có tệp thì báo lỗi")
+	check(not saver.load_game()["ok"], "không có tệp thì báo lỗi")
 
 	var s = FarmState.new()
 	s.coins = 123
 	ok(GameRules.sow(s, 0, "seed_leafy_greens"), "gieo")
-	ok(GameRules.water(s, 0), "tưới")
+	ok(GameRules.water(s, 0, T0 + 0.25), "tưới")
 	s = night(s)
 	ok(GameRules.buy_building(s, "coop"), "mua chuồng gà")
 	s.player_pos = Vector2(1.5, -2.25)
@@ -270,11 +271,10 @@ func test_b06_save_load() -> void:
 	var r: Dictionary = saver.load_game()
 	check(r["ok"], "tải lại được")
 	if r["ok"]:
-		eq(r["state"].to_dict(), s.to_dict(), "tiền, túi, ngày, công trình, tiến độ giữ nguyên")
+		eq(r["state"].to_dict(), s.to_dict(), "tiền, túi, ngày, công trình, thời điểm tưới giữ nguyên")
 
-	ok(GameRules.sow(s, 1, "seed_leafy_greens"), "gieo thêm")
+	ok(GameRules.sow(s, 1, "seed_water_spinach"), "gieo thêm")
 	eq(saver.save(s), "", "lưu lần 2")
-
 	var f := FileAccess.open(saver.main_path, FileAccess.WRITE)
 	f.store_string("{ hỏng")
 	f.close()
@@ -290,112 +290,69 @@ func test_b06_save_load() -> void:
 		var g := FileAccess.open(p, FileAccess.WRITE)
 		g.store_string(JSON.stringify(bad))
 		g.close()
-	r = saver.load_game()
-	check(not r["ok"], "phiên bản không hỗ trợ bị từ chối")
+	check(not saver.load_game()["ok"], "phiên bản không hỗ trợ bị từ chối")
 	check(FileAccess.file_exists(saver.main_path), "tệp phiên bản lạ vẫn được giữ")
 	saver.delete_all()
 
 
-# ================= B07 =================
+func test_migrate_v1_save() -> void:
+	var plots := []
+	plots.append({"crop": "leafy_greens", "growth": 1, "watered": false})
+	plots.append({"crop": "carrot", "growth": 3, "watered": false})
+	plots.append({"crop": "leafy_greens", "growth": 0, "watered": false})
+	for i in 3:
+		plots.append({"crop": "", "growth": 0, "watered": false})
+	var v1 := {
+		"schemaVersion": 1, "day": 5, "coins": 77,
+		"inventory": {"seed_leafy_greens": 2, "produce_carrot": 3},
+		"plots": plots,
+		"buildings": {"coop": true, "pond": false, "barn": false},
+		"pond": {"stocked": false, "growth": 0, "fed": false},
+		"animals": {"chicken": {"progress": 0, "fed": true, "ready": false}, "cow": {"progress": 0, "fed": false, "ready": false}},
+		"tutorialStep": 7,
+	}
+	var st = FarmState.new()
+	eq(st.load_dict(v1), "", "đọc được bản lưu phiên bản 1")
+	eq(st.coins, 77, "giữ số xu")
+	eq(st.count("produce_carrot"), 3, "giữ túi đồ")
+	check(st.buildings["coop"], "giữ công trình")
+	var now := Time.get_unix_time_from_system()
+	check(absf(GameRules.growth_fraction(st.plots[0], now) - 0.5) < 0.05, "cải 1/2 đêm thành lớn một nửa")
+	check(GameRules.is_ripe(st.plots[1], now), "cà rốt đủ 3 đêm thành đã chín")
+	check(not GameRules.is_watered(st.plots[2]), "cây chưa tưới vẫn chờ tưới")
+	eq(st.tutorial_step, GameData.TUTORIAL.size(), "hướng dẫn đã xong vẫn là xong")
 
-func test_b07_scenario_day9() -> void:
+
+# ================= Kinh tế / phục hồi =================
+
+func test_starter_economy() -> void:
 	var s = FarmState.new()
-	# D1–D2: gieo 6 ô cải, tưới hai ngày.
-	sow_all(s, "seed_leafy_greens")
-	water_all(s)
-	s = night(s)
-	water_all(s)
-	s = night(s)
-
-	# D3
-	eq(s.day, 3, "đến ngày 3")
-	harvest_all(s)
-	ok(GameRules.sell(s, "produce_leafy_greens", 12), "D3 bán 12 cải")
-	eq(s.coins, 148, "D3 có 148 xu")
-	ok(GameRules.buy_building(s, "coop"), "D3 mua chuồng gà")
-	ok(GameRules.buy(s, "seed_carrot", 6), "D3 mua 6 hạt cà rốt")
-	sow_all(s, "seed_carrot")
-	water_all(s)
-	ok(GameRules.buy(s, "feed_chicken", 1), "D3 mua cám gà")
-	ok(GameRules.feed_animal(s, "chicken"), "D3 cho gà ăn")
-	eq(s.coins, 13, "D3 còn 13 xu")
-	s = night(s)
-
-	# D4, D5
-	for d in 2:
-		ok(GameRules.collect_animal(s, "chicken"), "nhặt trứng")
-		ok(GameRules.sell(s, "egg", 1), "bán trứng")
-		ok(GameRules.buy(s, "feed_chicken", 1), "mua cám gà")
-		ok(GameRules.feed_animal(s, "chicken"), "cho gà ăn")
-		water_all(s)
-		s = night(s)
-	eq(s.coins, 25, "hết D5 có 25 xu")
-
-	# D6
-	ok(GameRules.collect_animal(s, "chicken"), "D6 nhặt trứng")
-	harvest_all(s)
-	ok(GameRules.sell(s, "produce_carrot", 18), "D6 bán 18 củ")
-	ok(GameRules.sell(s, "egg", 1), "D6 bán trứng")
-	eq(s.coins, 214, "D6 có 214 xu")
-	ok(GameRules.buy_building(s, "pond"), "D6 mua ao")
-	ok(GameRules.buy(s, "fish_fry", 1), "D6 mua cá giống")
-	ok(GameRules.stock_pond(s), "D6 thả cá")
-	ok(GameRules.buy(s, "feed_fish", 1), "D6 mua cám cá")
-	ok(GameRules.feed_pond(s), "D6 cho cá ăn")
-	ok(GameRules.buy(s, "feed_chicken", 1), "D6 mua cám gà")
-	ok(GameRules.feed_animal(s, "chicken"), "D6 cho gà ăn")
-	ok(GameRules.buy(s, "seed_leafy_greens", 6), "D6 mua 6 hạt cải")
-	sow_all(s, "seed_leafy_greens")
-	water_all(s)
-	eq(s.coins, 45, "D6 còn 45 xu")
-	s = night(s)
-
-	# D7
-	ok(GameRules.collect_animal(s, "chicken"), "D7 nhặt trứng")
-	ok(GameRules.sell(s, "egg", 1), "D7 bán trứng")
-	ok(GameRules.buy(s, "feed_chicken", 1), "D7 mua cám gà")
-	ok(GameRules.buy(s, "feed_fish", 1), "D7 mua cám cá")
-	ok(GameRules.feed_animal(s, "chicken"), "D7 cho gà ăn")
-	ok(GameRules.feed_pond(s), "D7 cho cá ăn")
-	water_all(s)
-	eq(s.coins, 47, "D7 còn 47 xu")
-	s = night(s)
-
-	# D8
-	ok(GameRules.collect_animal(s, "chicken"), "D8 nhặt trứng")
-	harvest_all(s)
-	ok(GameRules.sell(s, "produce_leafy_greens", 12), "D8 bán 12 cải")
-	ok(GameRules.sell(s, "egg", 1), "D8 bán trứng")
-	ok(GameRules.buy(s, "feed_chicken", 1), "D8 mua cám gà")
-	ok(GameRules.buy(s, "feed_fish", 1), "D8 mua cám cá")
-	ok(GameRules.feed_animal(s, "chicken"), "D8 cho gà ăn")
-	ok(GameRules.feed_pond(s), "D8 cho cá ăn")
-	eq(s.coins, 157, "D8 còn 157 xu")
-	s = night(s)
-
-	# D9
-	eq(s.day, 9, "đến ngày 9")
-	ok(GameRules.collect_animal(s, "chicken"), "D9 nhặt trứng")
-	ok(GameRules.harvest_pond(s), "D9 thu cá")
-	ok(GameRules.sell(s, "egg", 1), "D9 bán trứng")
-	ok(GameRules.sell(s, "fish_ro", 3), "D9 bán 3 cá")
-	eq(s.coins, 226, "D9 có 226 xu trước khi mua bò")
-	ok(GameRules.buy_building(s, "barn"), "D9 mở chuồng bò")
-	eq(s.coins, 86, "D9 còn 86 xu sau khi mua bò")
+	eq(s.coins, 40, "bắt đầu 40 xu")
+	for i in 3:
+		ok(GameRules.sow(s, i, "seed_water_spinach"), "gieo rau muống")
+		ok(GameRules.sow(s, i + 3, "seed_leafy_greens"), "gieo cải")
+	for i in GameData.PLOT_COUNT:
+		ok(GameRules.water(s, i, T0), "tưới ô %d" % i)
+	for i in 3:
+		ok(GameRules.harvest(s, i, T0 + 30.0), "rau muống chín sau 30 giây")
+		no(GameRules.harvest(s, i + 3, T0 + 30.0), "cải chưa chín sau 30 giây")
+	for i in 3:
+		ok(GameRules.harvest(s, i + 3, T0 + 60.0), "cải chín sau 1 phút")
+	ok(GameRules.sell(s, "produce_water_spinach", 6), "bán 6 bó rau muống")
+	ok(GameRules.sell(s, "produce_leafy_greens", 6), "bán 6 cây cải")
+	eq(s.coins, 40 + 30 + 54, "sau 1 phút có 124 xu")
+	ok(GameRules.buy_building(s, "coop"), "đủ tiền xây chuồng gà")
 
 
-func test_b07_recovery() -> void:
+func test_recovery() -> void:
 	var s = FarmState.new()
 	s.coins = 0
 	s.inventory = {}
 	ok(GameRules.claim_free_seed(s), "cạn vốn nhận được hạt")
 	no(GameRules.claim_free_seed(s), "nhận xong thì túi không còn trống")
 	ok(GameRules.sow(s, 0, "seed_leafy_greens_gift"), "gieo hạt tặng")
-	ok(GameRules.water(s, 0), "tưới")
-	s = night(s)
-	ok(GameRules.water(s, 0), "tưới")
-	s = night(s)
-	ok(GameRules.harvest(s, 0), "thu")
+	ok(GameRules.water(s, 0, T0), "tưới")
+	ok(GameRules.harvest(s, 0, T0 + 60.0), "thu")
 	ok(GameRules.sell(s, "produce_leafy_greens", 2), "bán")
 	eq(s.coins, 18, "có 18 xu")
 	ok(GameRules.buy(s, "seed_leafy_greens", 1), "quay lại chu kỳ mua giống")

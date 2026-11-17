@@ -25,7 +25,7 @@ func has_save() -> bool:
 ## Trả về "" nếu lưu thành công, ngược lại là thông báo lỗi.
 func save(state) -> String:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
-	var text := JSON.stringify(state.to_dict(), "\t")
+	var text := JSON.stringify(state.to_dict(), "\t", true, true)
 	var f := FileAccess.open(tmp_path, FileAccess.WRITE)
 	if f == null:
 		return "Không mở được tệp tạm (%s)." % error_string(FileAccess.get_open_error())

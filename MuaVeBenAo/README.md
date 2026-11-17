@@ -6,6 +6,27 @@ Game nông trại 3D thư giãn, làm bằng Godot 4 và GDScript, theo `Game_No
 
 Mỗi lần đẩy code lên nhánh `main`, GitHub Actions tự chạy kiểm thử, xuất bản Web rồi cập nhật link trên sau khoảng 1–2 phút. Bản lỗi không được đăng. Tiến độ của mỗi người chơi được lưu trong trình duyệt của chính họ.
 
+## Cây trồng (thời gian thực)
+
+Gieo hạt rồi tưới một lần. Từ lúc tưới, cây lớn theo đồng hồ thật, kể cả khi đã đóng game. Cây càng lâu chín thì mỗi vụ càng lãi.
+
+| Cây | Thời gian | Giá hạt | Thu | Giá bán | Lãi/vụ |
+|---|---|---:|---|---:|---:|
+| Rau muống | 30 giây | 4 | 2 bó | 5 | 6 |
+| Cải ngọt | 1 phút | 8 | 2 cây | 9 | 10 |
+| Cà rốt | 2 phút | 12 | 3 củ | 10 | 18 |
+| Dưa leo | 3 phút | 15 | 3 quả | 12 | 21 |
+| Cà chua | 4 phút | 18 | 4 quả | 11 | 26 |
+| Ngô | 5 phút | 20 | 3 bắp | 16 | 28 |
+| Ớt | 7 phút | 22 | 5 quả | 11 | 33 |
+| Đậu phộng | 10 phút | 25 | 4 túi | 15 | 35 |
+| Khoai lang | 15 phút | 30 | 3 củ | 25 | 45 |
+| Lúa | 20 phút | 35 | 5 bao | 18 | 55 |
+| Bí đỏ | 30 phút | 45 | 2 quả | 60 | 75 |
+| Dưa hấu | 1 giờ | 60 | 2 quả | 100 | 140 |
+
+Gà, bò và cá vẫn lớn theo đêm: cho ăn trong ngày, rồi ngủ ở giường để sang ngày mới. Số liệu nằm trong `scripts/sim/game_data.gd`.
+
 ## Chạy game
 
 1. Cài **Godot 4.3 trở lên** (bản Standard, không cần bản .NET).

@@ -20,7 +20,6 @@ const POND_POS := Vector3(6.0, 0.0, -5.0)
 const POND_RADIUS := 2.2
 const BARN_POS := Vector3(0.5, 0.0, 6.0)
 const SPAWN_POS := Vector3(-6.0, 0.0, -1.0)
-const SEED_SLOTS := ["seed_leafy_greens", "seed_carrot"]
 
 var state = FarmState.new()
 var saver = SaveSystem.new()
@@ -34,6 +33,7 @@ var selected_seed := "seed_leafy_greens"
 var busy := false
 var in_game := false
 var pending_id := ""  # Đối tượng được chạm, sẽ tương tác khi đi tới nơi.
+var _plot_tick := 0.0
 
 var plot_nodes: Array = []
 var building_nodes := {}
@@ -106,9 +106,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("pause"):
 		ui.open_pause()
 	elif event.is_action_pressed("slot_1"):
-		select_seed(SEED_SLOTS[0])
+		cycle_seed_by(-1)
 	elif event.is_action_pressed("slot_2"):
-		select_seed(SEED_SLOTS[1])
+		cycle_seed_by(1)
 	elif event.is_action_pressed("toggle_tutorial"):
 		state.tutorial_closed = not state.tutorial_closed
 		ui.refresh()
@@ -130,6 +130,12 @@ func _process(delta: float) -> void:
 	_update_target()
 	if pending_id != "" and not player.has_nav:
 		_do_pending()
+	# Cây lớn theo đồng hồ thật: cập nhật đếm ngược và hình cây hai lần mỗi giây.
+	_plot_tick += delta
+	if _plot_tick >= 0.5:
+		_plot_tick = 0.0
+		for i in plot_nodes.size():
+			_refresh_plot(i)
 
 
 ## Chạm/nhấp lên thế giới: chọn đối tượng gần điểm chạm, hoặc đi tới điểm đó.
@@ -487,27 +493,39 @@ func refresh_all() -> void:
 		ui.refresh()
 
 
+## Cập nhật một ô ruộng theo đồng hồ thật. Mô hình cây chỉ dựng lại khi đổi giai đoạn
+## (5 giai đoạn), còn nhãn đếm ngược cập nhật mỗi lần gọi.
 func _refresh_plot(i: int) -> void:
 	var node: Dictionary = plot_nodes[i]
 	var plot: Dictionary = state.plots[i]
+	var t := GameRules.now()
 	var soil: StandardMaterial3D = node["soil_mat"]
-	soil.albedo_color = Art.SOIL_WET if plot["watered"] else Art.SOIL_DRY
+	var watered := GameRules.is_watered(plot)
+	var ripe := GameRules.is_ripe(plot, t)
+	soil.albedo_color = Art.SOIL_WET if watered and not ripe else Art.SOIL_DRY
+	var frac := GameRules.growth_fraction(plot, t)
+	var stage := "%s:%d" % [plot["crop"], 4 if ripe else int(frac * 4.0)]
 	var crop_root: Node3D = node["crop"]
-	for c in crop_root.get_children():
-		crop_root.remove_child(c)
-		c.queue_free()
+	if node.get("stage", "") != stage:
+		node["stage"] = stage
+		for c in crop_root.get_children():
+			crop_root.remove_child(c)
+			c.queue_free()
+		if plot["crop"] != "":
+			var def: Dictionary = GameData.CROPS[plot["crop"]]
+			var shown := 1.0 if ripe else minf(frac, 0.95)
+			Art.build_crop(crop_root, plot["crop"], def["shape"], Color(def["color"]), shown)
 	var lbl: Label3D = node["label"]
 	if plot["crop"] == "":
 		lbl.text = ""
 		return
-	var def: Dictionary = GameData.CROPS[plot["crop"]]
-	Art.build_crop(crop_root, plot["crop"], int(plot["growth"]), int(def["nights"]))
-	if GameRules.is_ripe(plot):
-		_set_status(lbl, "★ Chín – thu hoạch", Art.COLOR_READY)
-	elif not plot["watered"]:
+	var crop_name: String = GameData.CROPS[plot["crop"]]["name"]
+	if ripe:
+		_set_status(lbl, "★ %s chín rồi!" % crop_name, Art.COLOR_READY)
+	elif not watered:
 		_set_status(lbl, "● Cần tưới", Art.COLOR_NEED)
 	else:
-		_set_status(lbl, "%s %d/%d đêm" % [def["name"], plot["growth"], def["nights"]], Art.COLOR_INFO)
+		_set_status(lbl, "%s · %s" % [crop_name, GameData.fmt_time(GameRules.seconds_left(plot, t))], Art.COLOR_INFO)
 
 
 func _set_status(lbl: Label3D, text: String, color: Color) -> void:
@@ -551,10 +569,26 @@ func _refresh_buildings() -> void:
 
 # ================= Lời nhắc + tương tác =================
 
+## Hạt đang cầm. Nếu hết loại đã chọn thì tự lấy loại khác đang có trong túi.
 func _seed_to_use() -> String:
-	if selected_seed == "seed_leafy_greens" and state.count(selected_seed) == 0 and state.count(GameData.FREE_SEED_ITEM) > 0:
+	if state.count(selected_seed) > 0:
+		return selected_seed
+	if selected_seed == "seed_leafy_greens" and state.count(GameData.FREE_SEED_ITEM) > 0:
 		return GameData.FREE_SEED_ITEM
+	for seed_id in _owned_seeds():
+		return seed_id
 	return selected_seed
+
+
+func _owned_seeds() -> Array:
+	var out: Array = []
+	for crop_id in GameData.CROP_ORDER:
+		var seed_id: String = "seed_" + crop_id
+		if state.count(seed_id) > 0:
+			out.append(seed_id)
+	if state.count(GameData.FREE_SEED_ITEM) > 0:
+		out.append(GameData.FREE_SEED_ITEM)
+	return out
 
 
 func describe_target(id: String) -> String:
@@ -567,13 +601,14 @@ func describe_target(id: String) -> String:
 			var n: int = state.count(seed_id)
 			if n > 0:
 				return "[E] Gieo %s (còn %d)" % [GameData.item_name(seed_id), n]
-			return "Ô trống – hết %s. Nhấn 1/2 để đổi hạt hoặc mua ở chợ." % GameData.item_name(selected_seed)
+			return "Ô trống – hết hạt giống. Mua thêm ở quầy chợ nhé."
 		var def: Dictionary = GameData.CROPS[plot["crop"]]
-		if GameRules.is_ripe(plot):
+		var t := GameRules.now()
+		if GameRules.is_ripe(plot, t):
 			return "[E] Thu hoạch %s (+%d)" % [def["name"], def["yield"]]
-		if not plot["watered"]:
-			return "[E] Tưới %s – %d/%d đêm" % [def["name"], plot["growth"], def["nights"]]
-		return "%s đã tưới hôm nay (%d/%d đêm). Ngủ để cây lớn." % [def["name"], plot["growth"], def["nights"]]
+		if not GameRules.is_watered(plot):
+			return "[E] Tưới %s – chín sau %s" % [def["name"], GameData.fmt_duration(int(def["seconds"]))]
+		return "%s đang lớn – còn %s" % [def["name"], GameData.fmt_time(GameRules.seconds_left(plot, t))]
 	match id:
 		"bed":
 			return "[E] Ngủ – kết thúc ngày %d" % state.day
@@ -626,9 +661,9 @@ func action_verb(id: String) -> String:
 		var plot: Dictionary = state.plots[int(id.substr(5))]
 		if plot["crop"] == "":
 			return "Gieo" if state.count(_seed_to_use()) > 0 else ""
-		if GameRules.is_ripe(plot):
+		if GameRules.is_ripe(plot, GameRules.now()):
 			return "Thu"
-		return "Tưới" if not plot["watered"] else ""
+		return "Tưới" if not GameRules.is_watered(plot) else ""
 	match id:
 		"bed":
 			return "Ngủ"
@@ -665,10 +700,10 @@ func interact(id: String) -> void:
 		var plot: Dictionary = state.plots[i]
 		if plot["crop"] == "":
 			_apply(GameRules.sow(state, i, _seed_to_use()), "sow")
-		elif GameRules.is_ripe(plot):
-			_apply(GameRules.harvest(state, i), "harvest")
+		elif GameRules.is_ripe(plot, GameRules.now()):
+			_apply(GameRules.harvest(state, i, GameRules.now()), "harvest")
 		else:
-			_apply(GameRules.water(state, i), "water")
+			_apply(GameRules.water(state, i, GameRules.now()), "water")
 		return
 	match id:
 		"bed":
@@ -781,8 +816,18 @@ func seed_in_hand() -> String:
 
 
 func cycle_seed() -> void:
-	var i := SEED_SLOTS.find(selected_seed)
-	select_seed(SEED_SLOTS[(i + 1) % SEED_SLOTS.size()])
+	cycle_seed_by(1)
+
+
+## Đổi sang loại hạt kế tiếp đang có trong túi.
+func cycle_seed_by(step: int) -> void:
+	var owned := _owned_seeds()
+	owned.erase(GameData.FREE_SEED_ITEM)
+	if owned.is_empty():
+		ui.toast("Túi chưa có hạt giống. Ra quầy chợ mua nhé!", false)
+		return
+	var i := owned.find(_seed_to_use())
+	select_seed(owned[(i + step + owned.size()) % owned.size()])
 
 
 func new_game() -> void:

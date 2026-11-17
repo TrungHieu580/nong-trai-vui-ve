@@ -42,8 +42,9 @@ func reset() -> void:
 	tutorial_closed = false
 
 
+## watered_at: thời điểm (Unix, giây) được tưới; 0 = chưa tưới nên chưa lớn.
 static func empty_plot() -> Dictionary:
-	return {"crop": "", "growth": 0, "watered": false}
+	return {"crop": "", "watered_at": 0.0}
 
 
 static func empty_pond() -> Dictionary:
@@ -125,8 +126,9 @@ func load_dict(d) -> String:
 	var ver = d.get("schemaVersion")
 	if not _is_num(ver):
 		return "Tệp lưu thiếu schemaVersion."
-	if int(ver) != GameData.SCHEMA_VERSION:
-		return "Phiên bản lưu %d chưa được hỗ trợ (cần %d)." % [int(ver), GameData.SCHEMA_VERSION]
+	var v := int(ver)
+	if v < 1 or v > GameData.SCHEMA_VERSION:
+		return "Phiên bản lưu %d chưa được hỗ trợ (cần %d)." % [v, GameData.SCHEMA_VERSION]
 	if not _is_num(d.get("day")) or int(d["day"]) < 1:
 		return "Ngày trong tệp lưu không hợp lệ."
 	if not _is_num(d.get("coins")) or int(d["coins"]) < 0:
@@ -145,6 +147,7 @@ func load_dict(d) -> String:
 	var plots_src = d.get("plots")
 	if typeof(plots_src) != TYPE_ARRAY or plots_src.size() != GameData.PLOT_COUNT:
 		return "Dữ liệu ruộng không hợp lệ."
+	var now := Time.get_unix_time_from_system()
 	var new_plots := []
 	for p in plots_src:
 		if typeof(p) != TYPE_DICTIONARY:
@@ -152,11 +155,20 @@ func load_dict(d) -> String:
 		var crop := str(p.get("crop", ""))
 		if crop != "" and not GameData.CROPS.has(crop):
 			return "Ô ruộng có cây lạ: %s." % crop
-		new_plots.append({
-			"crop": crop,
-			"growth": maxi(0, _n(p.get("growth"))),
-			"watered": bool(p.get("watered", false)),
-		})
+		var watered_at := 0.0
+		if v == 1:
+			# Bản lưu cũ tính theo đêm (cải 2 đêm, cà rốt 3 đêm): đổi sang thời gian thực
+			# và giữ nguyên tỷ lệ tiến độ.
+			var growth := maxi(0, _n(p.get("growth")))
+			if crop != "" and (growth > 0 or bool(p.get("watered", false))):
+				var old_nights := 3.0 if crop == "carrot" else 2.0
+				var frac := clampf(growth / old_nights, 0.0, 1.0)
+				watered_at = now - frac * float(GameData.CROPS[crop]["seconds"])
+		else:
+			var w = p.get("watered_at", 0.0)
+			if _is_num(w) and float(w) > 0.0 and crop != "":
+				watered_at = float(w)
+		new_plots.append({"crop": crop, "watered_at": watered_at})
 
 	var b_src = d.get("buildings")
 	if typeof(b_src) != TYPE_DICTIONARY:
@@ -203,6 +215,10 @@ func load_dict(d) -> String:
 	animals = new_animals
 	free_seed_day = _n(d.get("freeSeedDay"))
 	player_pos = pos
-	tutorial_step = clampi(_n(d.get("tutorialStep")), 0, GameData.TUTORIAL.size())
+	var step := _n(d.get("tutorialStep"))
+	if v == 1:
+		# Hướng dẫn cũ có 7 bước (gieo, tưới, ngủ, tưới, ngủ, thu, bán).
+		step = [0, 1, 2, 2, 2, 2, 3, 4][clampi(step, 0, 7)]
+	tutorial_step = clampi(step, 0, GameData.TUTORIAL.size())
 	tutorial_closed = bool(d.get("tutorialClosed", false))
 	return ""
