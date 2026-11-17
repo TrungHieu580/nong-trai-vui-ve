@@ -49,7 +49,7 @@ static func outline_mat() -> StandardMaterial3D:
 		_outline.albedo_color = Color("3b2a20")
 		_outline.cull_mode = BaseMaterial3D.CULL_FRONT
 		_outline.grow = true
-		_outline.grow_amount = 0.018
+		_outline.grow_amount = 0.035
 	return _outline
 
 

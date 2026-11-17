@@ -2,7 +2,7 @@ extends RefCounted
 ## Dữ liệu cấu hình: vật phẩm, cây trồng, vật nuôi, ao, công trình, hướng dẫn.
 ## Cân bằng game bằng cách sửa số ở đây – không cần đụng vào logic.
 
-const GAME_VERSION := "0.3.0"
+const GAME_VERSION := "0.3.1"
 const SCHEMA_VERSION := 1
 const START_COINS := 40
 const START_INVENTORY := {"seed_leafy_greens": 6}

@@ -239,18 +239,19 @@ func _build_environment() -> void:
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color("bfe3f2")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("fff3e6")
+	env.ambient_light_color = Color("ffffff")
 	# Bản Web dùng trình kết xuất Compatibility, cảnh sáng hơn bản PC nên giảm nắng,
 	# tăng ánh sáng môi trường để bóng đổ mềm kiểu tranh vẽ.
-	env.ambient_light_energy = 0.22
+	env.ambient_light_energy = 0.25
+	env.tonemap_white = 1.6
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-55, -35, 0)
-	sun.light_energy = 0.5
-	sun.light_color = Color("fff1d6")
+	sun.light_energy = 0.38
+	sun.light_color = Color("ffffff")
 	sun.shadow_enabled = true
 	add_child(sun)
 
@@ -463,9 +464,9 @@ func _spawn_player() -> void:
 	camera_rig.position = SPAWN_POS
 	add_child(camera_rig)
 	var cam := Camera3D.new()
-	cam.position = Vector3(0, 10.5, 10.5)
+	cam.position = Vector3(0, 8.0, 8.0)
 	cam.rotation_degrees = Vector3(-45, 0, 0)
-	cam.fov = 42.0
+	cam.fov = 40.0
 	camera_rig.add_child(cam)
 	cam.current = true
 
