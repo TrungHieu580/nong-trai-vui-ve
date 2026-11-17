@@ -177,6 +177,56 @@ static func harvest_pond(s) -> Dictionary:
 	return _ok("Thu được %d %s." % [GameData.POND["yield"], GameData.item_name(GameData.POND["product"]).to_lower()])
 
 
+# ================= Giá chợ biến động =================
+
+## Hàng nông sản/chăn nuôi có giá theo cung cầu; hạt giống, thức ăn thì giá cố định.
+static func is_market_good(item_id: String) -> bool:
+	return item_id.begins_with("produce_") or item_id in ["egg", "fish_ro", "milk"]
+
+
+static func demand_item(day: int) -> String:
+	return GameData.DEMAND_LIST[day % GameData.DEMAND_LIST.size()]
+
+
+## Giá chợ đang trả cho một món: giảm theo hàng tồn, tăng nếu là món chợ đang cần.
+static func market_price(s, item_id: String) -> int:
+	var base := GameData.sell_price(item_id)
+	if base <= 0 or not is_market_good(item_id):
+		return base
+	var stock := int(s.market_stock.get(item_id, 0))
+	var f := clampf(1.0 - GameData.STOCK_PRICE_DROP * stock, GameData.MIN_PRICE_FACTOR, 1.0)
+	if item_id == demand_item(s.day):
+		f *= GameData.DEMAND_BONUS
+	return maxi(1, roundi(base * f))
+
+
+## Đưa hàng lên chợ (dân làng hoặc người chơi bán) → hàng tồn tăng, giá giảm.
+static func market_add(s, item_id: String, qty: int) -> void:
+	if qty > 0 and is_market_good(item_id):
+		s.market_stock[item_id] = int(s.market_stock.get(item_id, 0)) + qty
+
+
+## Khách mua bớt hàng ở chợ → hàng tồn giảm, giá hồi lại. Trả về số đã bán.
+static func market_take(s, item_id: String, qty: int) -> int:
+	var have := int(s.market_stock.get(item_id, 0))
+	var n := mini(have, qty)
+	if n <= 0:
+		return 0
+	if have - n <= 0:
+		s.market_stock.erase(item_id)
+	else:
+		s.market_stock[item_id] = have - n
+	return n
+
+
+## Ghi một dòng vào bảng tin làng (giữ 30 dòng gần nhất).
+static func add_log(s, text: String) -> void:
+	var m := int(s.clock)
+	s.village_log.append("%02d:%02d %s" % [m / 60, m % 60, text])
+	while s.village_log.size() > 30:
+		s.village_log.pop_front()
+
+
 # ================= Chợ =================
 
 static func buy(s, item_id: String, qty) -> Dictionary:
@@ -196,7 +246,7 @@ static func buy(s, item_id: String, qty) -> Dictionary:
 static func sell(s, item_id: String, qty) -> Dictionary:
 	if not _valid_qty(qty):
 		return _fail("Số lượng phải là số nguyên dương.")
-	var price := GameData.sell_price(item_id)
+	var price := market_price(s, item_id)
 	if price <= 0:
 		return _fail("Chợ không mua %s." % GameData.item_name(item_id))
 	if s.count(item_id) < qty:
@@ -204,6 +254,7 @@ static func sell(s, item_id: String, qty) -> Dictionary:
 	var total: int = price * qty
 	s.remove_item(item_id, qty)
 	s.coins += total
+	market_add(s, item_id, qty)
 	return _ok("Đã bán %d %s (+%d xu)." % [qty, GameData.item_name(item_id), total])
 
 

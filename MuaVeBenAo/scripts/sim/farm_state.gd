@@ -14,6 +14,11 @@ var free_seed_day: int
 var player_pos: Vector2
 var tutorial_step: int
 var tutorial_closed: bool
+## Xóm làng
+var clock: float            # phút trong ngày (0..1440)
+var market_stock: Dictionary  # hàng đang tồn ở chợ → ảnh hưởng giá bán
+var paddies: Array          # ruộng lúa làng: {"stage", "grow"}
+var village_log: Array      # tin làng gần nhất
 
 
 func _init() -> void:
@@ -40,6 +45,12 @@ func reset() -> void:
 	player_pos = Vector2(-6.0, -1.0)
 	tutorial_step = 0
 	tutorial_closed = false
+	clock = GameData.MORNING
+	market_stock = {}
+	paddies = []
+	for i in GameData.PADDY_COUNT:
+		paddies.append({"stage": "bare", "grow": 0.0})
+	village_log = []
 
 
 ## watered_at: thời điểm (Unix, giây) được tưới; 0 = chưa tưới nên chưa lớn.
@@ -105,6 +116,10 @@ func to_dict() -> Dictionary:
 		"player": {"x": player_pos.x, "z": player_pos.y},
 		"tutorialStep": tutorial_step,
 		"tutorialClosed": tutorial_closed,
+		"clock": clock,
+		"marketStock": market_stock.duplicate(true),
+		"paddies": paddies.duplicate(true),
+		"villageLog": village_log.duplicate(),
 	}
 
 
@@ -200,6 +215,34 @@ func load_dict(d) -> String:
 			"ready": bool(src.get("ready", false)),
 		}
 
+	# --- Xóm làng (bản lưu cũ chưa có thì dùng mặc định) ---
+	var new_clock := GameData.MORNING
+	if _is_num(d.get("clock")):
+		new_clock = fposmod(float(d["clock"]), 1440.0)
+	var new_stock := {}
+	var st_src = d.get("marketStock", {})
+	if typeof(st_src) == TYPE_DICTIONARY:
+		for k in st_src:
+			if GameData.ITEMS.has(k) and _is_num(st_src[k]) and int(st_src[k]) > 0:
+				new_stock[str(k)] = int(st_src[k])
+	var new_paddies := []
+	var pd_src = d.get("paddies", [])
+	for i in GameData.PADDY_COUNT:
+		var stage := "bare"
+		var grow := 0.0
+		if typeof(pd_src) == TYPE_ARRAY and i < pd_src.size() and typeof(pd_src[i]) == TYPE_DICTIONARY:
+			var sp := str(pd_src[i].get("stage", "bare"))
+			if GameData.PADDY_STAGES.has(sp):
+				stage = sp
+			if _is_num(pd_src[i].get("grow")):
+				grow = maxf(0.0, float(pd_src[i]["grow"]))
+		new_paddies.append({"stage": stage, "grow": grow})
+	var new_log := []
+	var lg = d.get("villageLog", [])
+	if typeof(lg) == TYPE_ARRAY:
+		for line in lg:
+			new_log.append(str(line))
+
 	var pl = d.get("player", {})
 	var pos := Vector2(-6.0, -1.0)
 	if typeof(pl) == TYPE_DICTIONARY and _is_num(pl.get("x")) and _is_num(pl.get("z")):
@@ -215,6 +258,10 @@ func load_dict(d) -> String:
 	animals = new_animals
 	free_seed_day = _n(d.get("freeSeedDay"))
 	player_pos = pos
+	clock = new_clock
+	market_stock = new_stock
+	paddies = new_paddies
+	village_log = new_log
 	var step := _n(d.get("tutorialStep"))
 	if v == 1:
 		# Hướng dẫn cũ có 7 bước (gieo, tưới, ngủ, tưới, ngủ, thu, bán).

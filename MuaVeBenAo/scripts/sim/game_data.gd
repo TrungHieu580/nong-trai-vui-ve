@@ -2,8 +2,21 @@ extends RefCounted
 ## Dữ liệu cấu hình: vật phẩm, cây trồng, vật nuôi, ao, công trình, hướng dẫn.
 ## Cân bằng game bằng cách sửa số ở đây – không cần đụng vào logic.
 
-const GAME_VERSION := "0.4.0"
-const SCHEMA_VERSION := 2
+const GAME_VERSION := "0.5.0"
+const SCHEMA_VERSION := 3
+const PADDY_COUNT := 6
+const PADDY_STAGES := ["bare", "plowed", "planted", "growing", "ripe"]
+## Giờ bắt đầu ngày mới (phút trong ngày): 6:00 sáng.
+const MORNING := 360.0
+
+## Mỗi ngày chợ "đang cần" một mặt hàng (trả giá cao hơn 30%), xoay vòng theo ngày.
+const DEMAND_LIST := ["produce_corn", "produce_tomato", "egg", "produce_peanut", "fish_ro",
+	"produce_chili", "produce_sweet_potato", "produce_cucumber", "produce_carrot", "milk",
+	"produce_pumpkin", "produce_water_spinach", "produce_rice", "produce_watermelon", "produce_leafy_greens"]
+const DEMAND_BONUS := 1.3
+## Mỗi món đang tồn ở chợ làm giá giảm 3%, thấp nhất còn 50% giá gốc.
+const STOCK_PRICE_DROP := 0.03
+const MIN_PRICE_FACTOR := 0.5
 const START_COINS := 40
 const START_INVENTORY := {"seed_water_spinach": 3, "seed_leafy_greens": 3}
 const PLOT_COUNT := 6

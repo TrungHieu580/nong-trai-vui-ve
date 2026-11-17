@@ -7,6 +7,8 @@ const GameData = preload("res://scripts/sim/game_data.gd")
 const FarmState = preload("res://scripts/sim/farm_state.gd")
 const GameRules = preload("res://scripts/sim/game_rules.gd")
 const SaveSystem = preload("res://scripts/sim/save_system.gd")
+const VillageSim = preload("res://scripts/sim/village_sim.gd")
+const VD = preload("res://scripts/sim/village_data.gd")
 
 ## Mốc thời gian giả cho kiểm thử (không phải chờ thật).
 const T0 := 1_800_000_000.0
@@ -32,6 +34,9 @@ func _init() -> void:
 		"test_starter_economy",
 		"test_recovery",
 		"test_free_seed_not_exploitable",
+		"test_market_dynamic_price",
+		"test_village_three_days",
+		"test_village_save_roundtrip",
 	]
 	for t in tests:
 		_current = t
@@ -356,6 +361,110 @@ func test_recovery() -> void:
 	ok(GameRules.sell(s, "produce_leafy_greens", 2), "bán")
 	eq(s.coins, 18, "có 18 xu")
 	ok(GameRules.buy(s, "seed_leafy_greens", 1), "quay lại chu kỳ mua giống")
+
+
+func test_market_dynamic_price() -> void:
+	var s = FarmState.new()
+	s.day = 1
+	var item := "produce_leafy_greens"
+	check(GameRules.demand_item(s.day) != item, "ngày 1 chợ không cần cải (giá gốc)")
+	eq(GameRules.market_price(s, item), 9, "chợ trống thì giá gốc 9")
+	s.add_item(item, 10)
+	ok(GameRules.sell(s, item, 10), "bán 10 cải")
+	eq(s.coins, 40 + 90, "cả lô bán theo giá lúc bắt đầu bán")
+	eq(int(s.market_stock.get(item, 0)), 10, "chợ tồn 10 cải")
+	eq(GameRules.market_price(s, item), 6, "tồn 10 món thì giá còn 6")
+	s.market_stock[item] = 1000
+	eq(GameRules.market_price(s, item), 5, "giá không thấp hơn một nửa (làm tròn)")
+	eq(GameRules.market_take(s, item, 999), 999, "khách mua bớt hàng")
+	eq(GameRules.market_take(s, item, 5), 1, "không bán quá hàng đang có")
+	eq(GameRules.market_price(s, item), 9, "hết hàng tồn thì giá hồi về gốc")
+	var want := GameRules.demand_item(s.day)
+	eq(GameRules.market_price(s, want), roundi(GameData.sell_price(want) * GameData.DEMAND_BONUS), "món chợ đang cần được giá cao hơn")
+	eq(GameRules.market_price(s, "seed_carrot"), 6, "hạt giống không bị ảnh hưởng giá chợ")
+
+
+## Chạy làng 3 ngày (mỗi bước 0,5 giây thật) và kiểm tra mọi người làm đúng việc.
+func test_village_three_days() -> void:
+	var s = FarmState.new()
+	s.clock = 300.0
+	var v = VillageSim.new(s)
+	var max_rice := 0
+	var night_checks := 0
+	var night_ok := true
+	var stall_seen := false
+	var fish_seen := false
+	var plow_seen := false
+	var all_logs: Array = []
+	var last_line := ""
+	var steps := int(3 * 1440.0 / VD.MINUTES_PER_SECOND / 0.5)
+	for k in steps:
+		var ev: Dictionary = v.step(0.5)
+		if ev["new_day"]:
+			s = GameRules.sleep(s)["state"]
+			v.set_state(s)
+		var h: float = v.hour()
+		max_rice = maxi(max_rice, int(s.market_stock.get("produce_rice", 0)))
+		if h >= 2.0 and h < 4.0:
+			night_checks += 1
+			for p in v.villagers:
+				if p["visible"] or p["block"] != "sleep":
+					night_ok = false
+		if h >= 9.0 and h < 10.0:
+			var lan: Dictionary = v.get_villager("lan")
+			if lan["pos"].distance_to(VD.SPOTS["market_stall"]) < 0.05 and lan["activity"] == "Bán hàng":
+				stall_seen = true
+			var tu: Dictionary = v.get_villager("tu")
+			if tu["activity"] == "Câu cá" and tu["tool"] == "rod":
+				fish_seen = true
+		var ba: Dictionary = v.get_villager("ba")
+		if ba["activity"] == "Cày ruộng":
+			plow_seen = true
+		# gom tin làng (sau khi sang ngày, state mới vẫn mang theo tin cũ)
+		if not s.village_log.is_empty() and str(s.village_log.back()) != last_line:
+			last_line = str(s.village_log.back())
+			for line in s.village_log:
+				if not all_logs.has(line):
+					all_logs.append(line)
+	eq(s.day, 4, "sau 3 ngày mô phỏng là ngày 4")
+	check(night_checks > 0 and night_ok, "2–4 giờ sáng mọi người đều ở nhà ngủ")
+	check(stall_seen, "9 giờ sáng Cô Lan đứng bán ở quầy chợ")
+	check(fish_seen, "9 giờ sáng Chú Tư đang câu cá")
+	check(plow_seen, "Bác Ba có cày ruộng")
+	var text := "\n".join(all_logs)
+	for kw in ["cày xong", "cấy mạ", "dẫn nước", "gặt được", "bao lúa ra chợ", "câu được", "trứng gà", "cho khách"]:
+		check(text.contains(kw), "tin làng có \"%s\"" % kw)
+	check(max_rice > 0, "lúa của Bác Ba có lên chợ")
+	var stuck := 0
+	for p in v.villagers:
+		var pos: Vector2 = p["pos"]
+		if absf(pos.x) > 21.0 or pos.y < -13.5 or pos.y > 13.5:
+			stuck += 1
+	eq(stuck, 0, "không ai đi ra ngoài hàng rào làng")
+
+
+func test_village_save_roundtrip() -> void:
+	var s = FarmState.new()
+	s.clock = 845.5
+	s.paddies[2] = {"stage": "growing", "grow": 123.0}
+	GameRules.market_add(s, "produce_rice", 7)
+	GameRules.add_log(s, "Thử ghi tin.")
+	var t = FarmState.new()
+	eq(t.load_dict(s.to_dict()), "", "đọc lại được")
+	eq(t.clock, 845.5, "giữ giờ trong ngày")
+	eq(t.paddies[2]["stage"], "growing", "giữ trạng thái ruộng làng")
+	eq(int(t.market_stock.get("produce_rice", 0)), 7, "giữ hàng tồn ở chợ")
+	eq(t.village_log.size(), 1, "giữ tin làng")
+	check(str(t.village_log[0]).begins_with("14:05"), "tin làng có giờ")
+	var old: Dictionary = s.to_dict()
+	old.erase("clock")
+	old.erase("paddies")
+	old.erase("marketStock")
+	old["schemaVersion"] = 2
+	var u = FarmState.new()
+	eq(u.load_dict(old), "", "bản lưu cũ (chưa có làng) vẫn đọc được")
+	eq(u.clock, GameData.MORNING, "bản lưu cũ bắt đầu lúc 6 giờ sáng")
+	eq(u.paddies.size(), GameData.PADDY_COUNT, "bản lưu cũ có đủ ruộng làng")
 
 
 func test_free_seed_not_exploitable() -> void:
