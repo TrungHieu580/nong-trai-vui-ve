@@ -321,6 +321,7 @@ func _build_world() -> void:
 		var soil_mat := StandardMaterial3D.new()
 		soil_mat.albedo_color = Art.SOIL_DRY
 		soil_mat.roughness = 1.0
+		soil_mat.next_pass = Art.outline_mat()
 		var soil_mesh := BoxMesh.new()
 		soil_mesh.size = Vector3(1.6, 0.2, 1.6)
 		var soil := MeshInstance3D.new()

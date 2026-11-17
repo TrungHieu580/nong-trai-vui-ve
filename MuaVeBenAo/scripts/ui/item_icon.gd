@@ -203,16 +203,24 @@ func _hay() -> void:
 
 
 func _farmer() -> void:
-	_circle(0.5, 0.58, 0.3, Color("c98f62"))
-	_circle(0.5, 0.58, 0.27, Color("f6d2b0"))
-	_circle(0.4, 0.6, 0.035, Color("2b2b2b"))
-	_circle(0.6, 0.6, 0.035, Color("2b2b2b"))
-	_ellipse(0.33, 0.68, 0.05, 0.03, Color("f2a0a0"))
-	_ellipse(0.67, 0.68, 0.05, 0.03, Color("f2a0a0"))
-	_line(0.45, 0.72, 0.55, 0.72, Color("a0523a"), 0.025)
-	_poly([Vector2(0.5, 0.04), Vector2(0.96, 0.42), Vector2(0.04, 0.42)], Color("a8862e"))
-	_poly([Vector2(0.5, 0.08), Vector2(0.9, 0.4), Vector2(0.1, 0.4)], Color("e8c872"))
-	_line(0.3, 0.3, 0.7, 0.3, Color("caa54e"), 0.02)
+	var hair := Color("7a4a2e")
+	# Búi tóc + phần tóc sau
+	_circle(0.7, 0.18, 0.13, OUT)
+	_circle(0.7, 0.18, 0.105, hair)
+	_circle(0.5, 0.52, 0.38, OUT)
+	_circle(0.5, 0.52, 0.355, hair)
+	# Mặt
+	_ellipse(0.5, 0.62, 0.27, 0.25, Color("f6d2b0"))
+	# Mái tóc
+	_ellipse(0.4, 0.36, 0.2, 0.1, hair, 0.35)
+	_ellipse(0.6, 0.36, 0.2, 0.1, hair, -0.35)
+	_ellipse(0.4, 0.64, 0.03, 0.045, Color("2b2b2b"))
+	_ellipse(0.6, 0.64, 0.03, 0.045, Color("2b2b2b"))
+	_ellipse(0.33, 0.72, 0.05, 0.03, Color("f2a0a0"))
+	_ellipse(0.67, 0.72, 0.05, 0.03, Color("f2a0a0"))
+	_line(0.46, 0.76, 0.54, 0.76, Color("a0523a"), 0.025)
+	# Cổ áo yếm
+	_poly([Vector2(0.3, 0.92), Vector2(0.7, 0.92), Vector2(0.64, 0.86), Vector2(0.36, 0.86)], Color("6f9bd1"))
 
 
 func _coop() -> void:

@@ -33,7 +33,24 @@ const COLOR_NEED := Color("ff8a7a")
 const COLOR_READY := Color("ffd23f")
 const COLOR_INFO := Color("ffffff")
 
+const SHIRT_WHITE := Color("fbf6ee")
+const OVERALL := Color("6f9bd1")
+const HAIR := Color("7a4a2e")
+
 static var _mats := {}
+static var _outline: StandardMaterial3D
+
+
+## Viền mực kiểu tranh vẽ: vẽ lại mặt sau phình ra một chút, màu nâu đậm.
+static func outline_mat() -> StandardMaterial3D:
+	if _outline == null:
+		_outline = StandardMaterial3D.new()
+		_outline.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_outline.albedo_color = Color("3b2a20")
+		_outline.cull_mode = BaseMaterial3D.CULL_FRONT
+		_outline.grow = true
+		_outline.grow_amount = 0.018
+	return _outline
 
 
 static func mat(c: Color) -> StandardMaterial3D:
@@ -43,6 +60,7 @@ static func mat(c: Color) -> StandardMaterial3D:
 		m.albedo_color = c
 		m.roughness = 1.0
 		m.metallic_specular = 0.15
+		m.next_pass = outline_mat()
 		_mats[key] = m
 	return _mats[key]
 
@@ -110,30 +128,42 @@ static func label(text: String, pos: Vector3, font_px: int = 40) -> Label3D:
 
 # ================= Nhân vật =================
 
-## Mặt nhân vật hướng về +Z.
+## Nhân vật chibi: đầu to, tóc nâu búi, áo trắng, quần yếm xanh. Mặt hướng về +Z.
 static func build_farmer() -> Node3D:
 	var r := Node3D.new()
-	r.add_child(box(Vector3(0.17, 0.2, 0.26), BOOT, Vector3(-0.12, 0.1, 0.03)))
-	r.add_child(box(Vector3(0.17, 0.2, 0.26), BOOT, Vector3(0.12, 0.1, 0.03)))
-	r.add_child(cyl(0.2, 0.23, 0.3, PANTS, Vector3(0, 0.34, 0)))
-	r.add_child(cyl(0.21, 0.29, 0.42, SHIRT, Vector3(0, 0.68, 0)))
-	r.add_child(capsule(0.08, 0.42, SHIRT, Vector3(-0.31, 0.7, 0), Vector3(0, 0, 14)))
-	r.add_child(capsule(0.08, 0.42, SHIRT, Vector3(0.31, 0.7, 0), Vector3(0, 0, -14)))
-	r.add_child(sphere(0.08, SKIN, Vector3(-0.36, 0.48, 0)))
-	r.add_child(sphere(0.08, SKIN, Vector3(0.36, 0.48, 0)))
-	# Túi vải đeo chéo
-	r.add_child(box(Vector3(0.05, 0.5, 0.04), BAG, Vector3(0, 0.72, 0.24), Vector3(0, 0, 40)))
-	r.add_child(box(Vector3(0.26, 0.24, 0.12), BAG, Vector3(0.27, 0.52, 0.12)))
+	# Ủng nâu
+	r.add_child(box(Vector3(0.16, 0.14, 0.24), Color("8d5a3b"), Vector3(-0.1, 0.07, 0.03)))
+	r.add_child(box(Vector3(0.16, 0.14, 0.24), Color("8d5a3b"), Vector3(0.1, 0.07, 0.03)))
+	# Chân + quần yếm
+	r.add_child(cyl(0.07, 0.07, 0.2, OVERALL, Vector3(-0.1, 0.22, 0)))
+	r.add_child(cyl(0.07, 0.07, 0.2, OVERALL, Vector3(0.1, 0.22, 0)))
+	r.add_child(cyl(0.2, 0.24, 0.24, OVERALL, Vector3(0, 0.42, 0)))
+	# Áo trắng + yếm phía trước + quai đeo
+	r.add_child(cyl(0.19, 0.22, 0.3, SHIRT_WHITE, Vector3(0, 0.66, 0)))
+	r.add_child(box(Vector3(0.24, 0.22, 0.06), OVERALL, Vector3(0, 0.62, 0.19)))
+	r.add_child(box(Vector3(0.05, 0.24, 0.04), OVERALL, Vector3(-0.1, 0.72, 0.18), Vector3(-10, 0, 0)))
+	r.add_child(box(Vector3(0.05, 0.24, 0.04), OVERALL, Vector3(0.1, 0.72, 0.18), Vector3(-10, 0, 0)))
+	r.add_child(box(Vector3(0.09, 0.07, 0.02), Color("5a82b8"), Vector3(0, 0.6, 0.225)))
+	# Tay: tay áo ngắn trắng + bàn tay
+	r.add_child(capsule(0.075, 0.24, SHIRT_WHITE, Vector3(-0.25, 0.7, 0), Vector3(0, 0, 18)))
+	r.add_child(capsule(0.075, 0.24, SHIRT_WHITE, Vector3(0.25, 0.7, 0), Vector3(0, 0, -18)))
+	r.add_child(capsule(0.06, 0.2, SKIN, Vector3(-0.3, 0.55, 0), Vector3(0, 0, 10)))
+	r.add_child(capsule(0.06, 0.2, SKIN, Vector3(0.3, 0.55, 0), Vector3(0, 0, -10)))
 	# Đầu to
 	r.add_child(sphere(0.36, SKIN, Vector3(0, 1.17, 0)))
-	r.add_child(sphere(0.055, DARK, Vector3(-0.13, 1.2, 0.31)))
-	r.add_child(sphere(0.055, DARK, Vector3(0.13, 1.2, 0.31)))
-	r.add_child(sphere(0.06, PINK, Vector3(-0.21, 1.09, 0.27), Vector3(1, 0.6, 0.5)))
-	r.add_child(sphere(0.06, PINK, Vector3(0.21, 1.09, 0.27), Vector3(1, 0.6, 0.5)))
-	r.add_child(box(Vector3(0.1, 0.025, 0.02), Color("a0523a"), Vector3(0, 1.06, 0.345)))
-	# Nón lá
-	r.add_child(cyl(0.02, 0.64, 0.34, STRAW, Vector3(0, 1.58, 0)))
-	r.add_child(cyl(0.6, 0.6, 0.02, Color("d9b45a"), Vector3(0, 1.43, 0)))
+	# Tóc: phần sau đầu, mái phía trước, búi tóc
+	r.add_child(sphere(0.38, HAIR, Vector3(0, 1.22, -0.08)))
+	r.add_child(sphere(0.24, HAIR, Vector3(0, 1.4, 0.15), Vector3(1.45, 0.55, 1.0)))
+	r.add_child(sphere(0.12, HAIR, Vector3(-0.27, 1.22, 0.12), Vector3(0.7, 1.2, 0.8)))
+	r.add_child(sphere(0.12, HAIR, Vector3(0.27, 1.22, 0.12), Vector3(0.7, 1.2, 0.8)))
+	r.add_child(sphere(0.15, HAIR, Vector3(0.16, 1.6, -0.14)))
+	r.add_child(sphere(0.05, Color("f28b82"), Vector3(0.08, 1.56, -0.03)))
+	# Mặt
+	r.add_child(sphere(0.045, DARK, Vector3(-0.12, 1.16, 0.33), Vector3(1, 1.3, 0.6)))
+	r.add_child(sphere(0.045, DARK, Vector3(0.12, 1.16, 0.33), Vector3(1, 1.3, 0.6)))
+	r.add_child(sphere(0.06, PINK, Vector3(-0.2, 1.06, 0.28), Vector3(1.2, 0.6, 0.5)))
+	r.add_child(sphere(0.06, PINK, Vector3(0.2, 1.06, 0.28), Vector3(1.2, 0.6, 0.5)))
+	r.add_child(box(Vector3(0.08, 0.02, 0.02), Color("a0523a"), Vector3(0, 1.03, 0.35)))
 	return r
 
 
