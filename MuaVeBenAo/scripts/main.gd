@@ -227,10 +227,12 @@ func _sync_village(delta: float) -> void:
 ## Ánh sáng theo giờ: sáng – trưa – hoàng hôn – đêm; tối thì đèn lồng và cửa sổ sáng.
 func _apply_daylight() -> void:
 	var h: float = state.clock / 60.0
-	var day := clampf(sin(PI * (h - 5.5) / 14.0), 0.0, 1.0)
-	sun.light_energy = 0.04 + 0.42 * day
+	# Sáng từ ~4:30, đỉnh trưa ~12:30, tối hẳn ~20:30
+	var day := clampf(sin(PI * (h - 4.5) / 16.0), 0.0, 1.0)
+	day = sqrt(day)
+	sun.light_energy = 0.05 + 0.41 * day
 	sun.rotation_degrees.x = -lerpf(15.0, 70.0, day)
-	env.ambient_light_energy = 0.1 + 0.15 * day
+	env.ambient_light_energy = 0.12 + 0.13 * day
 	var night_col := Color("6f84c6")
 	var dusk := clampf(1.0 - absf(h - 18.0) / 1.5, 0.0, 1.0) + clampf(1.0 - absf(h - 6.0) / 1.0, 0.0, 1.0) * 0.6
 	var light_col := night_col.lerp(Color.WHITE, day).lerp(Color("ffb07a"), dusk * 0.6)

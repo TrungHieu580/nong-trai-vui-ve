@@ -2,7 +2,7 @@ extends RefCounted
 ## Dữ liệu cấu hình: vật phẩm, cây trồng, vật nuôi, ao, công trình, hướng dẫn.
 ## Cân bằng game bằng cách sửa số ở đây – không cần đụng vào logic.
 
-const GAME_VERSION := "0.5.0"
+const GAME_VERSION := "0.5.1"
 const SCHEMA_VERSION := 3
 const PADDY_COUNT := 6
 const PADDY_STAGES := ["bare", "plowed", "planted", "growing", "ripe"]
