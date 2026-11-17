@@ -10,6 +10,29 @@ var facing := Vector3(0, 0, 1)
 var model: Node3D
 var _t := 0.0
 
+## Đi tới điểm được chạm/nhấp chuột.
+var nav_target := Vector3.ZERO
+var has_nav := false
+var _stuck_t := 0.0
+
+
+func go_to(p: Vector3) -> void:
+	nav_target = Vector3(p.x, 0.0, p.z)
+	has_nav = true
+	_stuck_t = 0.0
+
+
+func stop_nav() -> void:
+	has_nav = false
+
+
+func face(p: Vector3) -> void:
+	var d := p - global_position
+	d.y = 0.0
+	if d.length_squared() > 0.0001:
+		facing = d.normalized()
+		model.rotation.y = atan2(facing.x, facing.z)
+
 
 func _ready() -> void:
 	var shape := CollisionShape3D.new()
@@ -28,6 +51,17 @@ func _physics_process(delta: float) -> void:
 	if input_enabled:
 		var v := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 		dir = Vector3(v.x, 0.0, v.y)
+		if dir.length_squared() > 0.0001:
+			has_nav = false
+		elif has_nav:
+			var to := nav_target - global_position
+			to.y = 0.0
+			if to.length() < 0.12:
+				has_nav = false
+			else:
+				dir = to.normalized() * minf(1.0, to.length() * 3.0)
+	else:
+		has_nav = false
 	if dir.length_squared() > 0.0001:
 		facing = dir.normalized()
 		model.rotation.y = lerp_angle(model.rotation.y, atan2(facing.x, facing.z), minf(1.0, 14.0 * delta))
@@ -41,7 +75,16 @@ func _physics_process(delta: float) -> void:
 		velocity.y = -0.1
 	else:
 		velocity.y -= GRAVITY * delta
+	var before := global_position
 	move_and_slide()
+	if has_nav:
+		# Bị vật cản chặn thì dừng, tránh đứng ì đẩy tường.
+		if (global_position - before).length() < SPEED * delta * 0.25:
+			_stuck_t += delta
+			if _stuck_t > 0.4:
+				has_nav = false
+		else:
+			_stuck_t = 0.0
 
 
 ## Hiệu ứng nhún ngắn khi thao tác thành công.

@@ -33,6 +33,7 @@ var highlight: MeshInstance3D
 var selected_seed := "seed_leafy_greens"
 var busy := false
 var in_game := false
+var pending_id := ""  # Đối tượng được chạm, sẽ tương tác khi đi tới nơi.
 
 var plot_nodes: Array = []
 var building_nodes := {}
@@ -94,6 +95,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			ui.close_modal()
 			get_viewport().set_input_as_handled()
 		return
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_on_tap(event.position)
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("interact"):
 		interact_current()
 	elif event.is_action_pressed("inventory"):
@@ -123,6 +128,58 @@ func _process(delta: float) -> void:
 	player.input_enabled = not busy and not ui.is_modal_open()
 	camera_rig.global_position = camera_rig.global_position.lerp(player.global_position, 1.0 - exp(-6.0 * delta))
 	_update_target()
+	if pending_id != "" and not player.has_nav:
+		_do_pending()
+
+
+## Chạm/nhấp lên thế giới: chọn đối tượng gần điểm chạm, hoặc đi tới điểm đó.
+func _on_tap(screen_pos: Vector2) -> void:
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	var origin := cam.project_ray_origin(screen_pos)
+	var dir := cam.project_ray_normal(screen_pos)
+	if dir.y > -0.01:
+		return
+	var hit := origin + dir * (-origin.y / dir.y)
+	var best: Dictionary = {}
+	var best_d := INF
+	for it in interactables:
+		var c: Vector3 = it["pos"]
+		var edge: float = it["edge"]
+		var d := Vector2(hit.x - c.x, hit.z - c.z).length()
+		if d <= maxf(edge + 0.6, 1.05) and d - edge < best_d:
+			best_d = d - edge
+			best = it
+	if best.is_empty():
+		pending_id = ""
+		player.go_to(hit)
+		return
+	pending_id = best["id"]
+	var center: Vector3 = best["pos"]
+	var away: Vector3 = player.global_position - center
+	away.y = 0.0
+	if away.length() <= float(best["reach"]) - 0.25:
+		player.stop_nav()
+		_do_pending()
+		return
+	if away.length() < 0.01:
+		away = Vector3(0, 0, 1)
+	player.go_to(center + away.normalized() * (float(best["edge"]) + 0.85))
+
+
+func _do_pending() -> void:
+	var id := pending_id
+	pending_id = ""
+	for it in interactables:
+		if it["id"] != id:
+			continue
+		var c: Vector3 = it["pos"]
+		var d := Vector2(player.global_position.x - c.x, player.global_position.z - c.z).length()
+		if d <= float(it["reach"]):
+			player.face(c)
+			interact(id)
+		return
 
 
 ## Chỉ MỘT mục tiêu được chọn: gần nhất, ưu tiên thứ đang đứng đối diện (B01).
@@ -155,7 +212,10 @@ func _update_target() -> void:
 		highlight.scale = Vector3(s, 1.0, s)
 		var pulse := 1.0 + sin(_time * 6.0) * 0.04
 		highlight.scale *= Vector3(pulse, 1.0, pulse)
-	ui.set_prompt(describe_target(best) if not busy else "")
+	if busy:
+		ui.set_prompt("", "")
+	else:
+		ui.set_prompt(describe_target(best), action_verb(best))
 
 
 func _animate() -> void:
@@ -179,16 +239,17 @@ func _build_environment() -> void:
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color("bfe3f2")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("dfe8f0")
-	# Bản Web dùng trình kết xuất Compatibility, cảnh sáng hơn bản PC nên giảm ánh sáng.
-	env.ambient_light_energy = 0.3
+	env.ambient_light_color = Color("fff3e6")
+	# Bản Web dùng trình kết xuất Compatibility, cảnh sáng hơn bản PC nên giảm nắng,
+	# tăng ánh sáng môi trường để bóng đổ mềm kiểu tranh vẽ.
+	env.ambient_light_energy = 0.45
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-55, -35, 0)
-	sun.light_energy = 0.7
+	sun.light_energy = 0.55
 	sun.light_color = Color("fff1d6")
 	sun.shadow_enabled = true
 	add_child(sun)
@@ -203,13 +264,44 @@ func _build_world() -> void:
 	ground_mesh.size = Vector2(60, 60)
 	add_child(Art.mesh(ground_mesh, Art.GRASS, Vector3.ZERO))
 	_add_collider(Vector3(0, -0.5, 0), Vector3(60, 1, 60))
-	for wall in [[Vector3(0, 1, -24), Vector3(48, 2, 1)], [Vector3(0, 1, 24), Vector3(48, 2, 1)],
-			[Vector3(-24, 1, 0), Vector3(1, 2, 48)], [Vector3(24, 1, 0), Vector3(1, 2, 48)]]:
+	for wall in [[Vector3(0, 1, -12.5), Vector3(30, 2, 0.5)], [Vector3(0, 1, 13.0), Vector3(30, 2, 0.5)],
+			[Vector3(-15, 1, 0), Vector3(0.5, 2, 26)], [Vector3(15, 1, 0), Vector3(0.5, 2, 26)]]:
 		_add_collider(wall[0], wall[1])
 
-	# Đường làng
-	add_child(Art.box(Vector3(22, 0.02, 1.4), Art.PATH, Vector3(0, 0.01, -0.6)))
-	add_child(Art.box(Vector3(1.4, 0.02, 8), Art.PATH, Vector3(8.5, 0.01, 0.2)))
+	# Đường làng màu đất nung + mảng cỏ đậm
+	add_child(Art.box(Vector3(22, 0.03, 1.5), Art.PATH, Vector3(0, 0.015, -0.6)))
+	add_child(Art.box(Vector3(1.5, 0.03, 8), Art.PATH, Vector3(8.5, 0.015, 0.2)))
+	for gp in [Vector3(-12, 0, -4), Vector3(-3, 0, 9), Vector3(12, 0, 8), Vector3(3, 0, -10), Vector3(-11, 0, 9)]:
+		add_child(Art.cyl(2.2, 2.4, 0.02, Art.GRASS_DARK, gp + Vector3(0, 0.01, 0)))
+
+	# Hàng rào gỗ bao quanh làng
+	for fl in [[Vector3(0, 0, -12.5), 0.0, 30.0], [Vector3(0, 0, 13.0), 0.0, 30.0],
+			[Vector3(-15.0, 0, 0.25), 90.0, 25.5], [Vector3(15.0, 0, 0.25), 90.0, 25.5]]:
+		var fence := Art.build_fence_line(fl[2])
+		fence.position = fl[0]
+		fence.rotation_degrees.y = fl[1]
+		add_child(fence)
+
+	# Hoa, bụi cây, đèn lồng, đá lát
+	for fp in [Vector3(-5.2, 0, -2.4), Vector3(3.2, 0, -2.0), Vector3(-10.5, 0, -2.3), Vector3(5.0, 0, 1.4),
+			Vector3(-4.5, 0, 1.6), Vector3(11.5, 0, 0.5), Vector3(-12.5, 0, 6.0), Vector3(3.5, 0, 9.5),
+			Vector3(9.5, 0, -8.8), Vector3(-6.0, 0, -10.5), Vector3(12.5, 0, 6.5), Vector3(-1.5, 0, 2.0)]:
+		var fpatch := Art.build_flower_patch(rng)
+		fpatch.position = fp
+		add_child(fpatch)
+	for bp in [Vector3(-12.8, 0, -9.0), Vector3(-6.0, 0, -11.2), Vector3(1.0, 0, -11.0), Vector3(13.0, 0, -5.0),
+			Vector3(13.2, 0, 3.0), Vector3(-13.3, 0, 2.5), Vector3(-4.0, 0, 11.5), Vector3(6.5, 0, 11.3)]:
+		var bush := Art.build_bush(rng)
+		bush.position = bp
+		add_child(bush)
+	for lp in [Vector3(-2.2, 0, 0.6), Vector3(4.5, 0, -1.9), Vector3(7.2, 0, 0.8)]:
+		var lantern := Art.build_lantern()
+		lantern.position = lp
+		add_child(lantern)
+	for sp in [Vector3(-3.5, 0, 3.5), Vector3(4.5, 0, 3.8)]:
+		var stones := Art.build_stepping_stones(rng, 5)
+		stones.position = sp
+		add_child(stones)
 
 	# Nhà + giường
 	var house := Art.build_house()
@@ -524,9 +616,47 @@ func _pond_prompt() -> String:
 	return "[E] Cho cá ăn (Cám cá: %d) – %d/%d đêm" % [state.count(GameData.POND["feed"]), p["growth"], GameData.POND["nights"]]
 
 
-func interact_current() -> void:
-	var id := current_target
+## Động từ ngắn cho nút hành động lớn; "" nghĩa là chưa làm gì được.
+func action_verb(id: String) -> String:
 	if id == "":
+		return ""
+	if id.begins_with("plot:"):
+		var plot: Dictionary = state.plots[int(id.substr(5))]
+		if plot["crop"] == "":
+			return "Gieo" if state.count(_seed_to_use()) > 0 else ""
+		if GameRules.is_ripe(plot):
+			return "Thu"
+		return "Tưới" if not plot["watered"] else ""
+	match id:
+		"bed":
+			return "Ngủ"
+		"market":
+			return "Chợ"
+		"coop", "barn":
+			var animal_id := "chicken" if id == "coop" else "cow"
+			if not state.buildings[id]:
+				return ""
+			var a: Dictionary = state.animals[animal_id]
+			if a["ready"]:
+				return "Thu"
+			return "" if a["fed"] else "Cho ăn"
+		"pond":
+			if not state.buildings["pond"]:
+				return ""
+			if not state.pond["stocked"]:
+				return "Thả cá"
+			if GameRules.pond_ready(state):
+				return "Thu cá"
+			return "" if state.pond["fed"] else "Cho ăn"
+	return ""
+
+
+func interact_current() -> void:
+	interact(current_target)
+
+
+func interact(id: String) -> void:
+	if id == "" or busy:
 		return
 	if id.begins_with("plot:"):
 		var i := int(id.substr(5))
@@ -603,7 +733,8 @@ func start_sleep() -> void:
 	if busy:
 		return
 	busy = true
-	ui.set_prompt("")
+	pending_id = ""
+	ui.set_prompt("", "")
 	await ui.fade_out()
 	var r: Dictionary = GameRules.sleep(state)
 	state = r["state"]
@@ -643,9 +774,13 @@ func select_seed(item_id: String) -> void:
 	ui.toast("Đang cầm: %s" % GameData.item_name(item_id), true)
 
 
-func held_text() -> String:
-	var seed_id := _seed_to_use()
-	return "%s ×%d" % [GameData.item_name(seed_id), state.count(seed_id)]
+func seed_in_hand() -> String:
+	return _seed_to_use()
+
+
+func cycle_seed() -> void:
+	var i := SEED_SLOTS.find(selected_seed)
+	select_seed(SEED_SLOTS[(i + 1) % SEED_SLOTS.size()])
 
 
 func new_game() -> void:

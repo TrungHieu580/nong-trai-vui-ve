@@ -3,19 +3,21 @@ extends RefCounted
 ## Mốc Tuần 4: thay từng hàm build_* bằng cảnh .glb xuất từ Blender
 ## (hoặc gói CC0 như Quaternius/Kenney) mà không phải sửa logic game.
 
-const GRASS := Color("8cc152")
-const PATH := Color("dcc89c")
-const SOIL_DRY := Color("a8774f")
-const SOIL_WET := Color("6b4630")
-const LEAF := Color("63b443")
-const LEAF_DARK := Color("3f8a2c")
-const CARROT := Color("f08a24")
-const STRAW := Color("e8c872")
-const WOOD := Color("9c6b3f")
-const WOOD_DARK := Color("6e4a2b")
-const ROOF := Color("c0533a")
-const WALL := Color("f3e3c3")
-const WATER := Color("4fa3d9")
+const GRASS := Color("a8cc8c")
+const GRASS_DARK := Color("93bb76")
+const PATH := Color("e58b6b")
+const STONE := Color("c9d3d6")
+const SOIL_DRY := Color("c98a68")
+const SOIL_WET := Color("94593f")
+const LEAF := Color("7cc35a")
+const LEAF_DARK := Color("5aa244")
+const CARROT := Color("f29a4a")
+const STRAW := Color("ecd08a")
+const WOOD := Color("c99a6a")
+const WOOD_DARK := Color("8d6443")
+const ROOF := Color("e46a6a")
+const WALL := Color("f7ead7")
+const WATER := Color("8fd3e8")
 const WHITE := Color("fbfaf5")
 const DARK := Color("2b2b2b")
 const SKIN := Color("f6d2b0")
@@ -196,15 +198,30 @@ static func build_crop(root: Node3D, crop_id: String, growth: int, nights: int) 
 			var a := TAU * float(k) / float(count)
 			var off := Vector3(cos(a), 0, sin(a)) * r * 0.7
 			root.add_child(sphere(r, LEAF if k % 2 == 0 else LEAF_DARK, off + Vector3(0, r * 0.5, 0), Vector3(1, 0.55, 1)))
-		root.add_child(sphere(r * 0.8, Color("8fd16a"), Vector3(0, r * 0.9, 0), Vector3(1, 0.8, 1)))
+		var head := r * 0.85
+		root.add_child(sphere(head, Color("a5dc85"), Vector3(0, r * 0.9, 0), Vector3(1, 0.9, 1)))
+		if ripe:
+			_face(root, Vector3(0, r * 0.95, head * 0.88), 0.07)
 	else:
-		var h := lerpf(0.2, 0.55, t)
+		var h := lerpf(0.2, 0.5, t)
+		var base_y := 0.32 if ripe else 0.0
 		for k in 4:
 			var a := TAU * float(k) / 4.0
-			root.add_child(cyl(0.015, 0.06, h, LEAF, Vector3(cos(a) * 0.06, h * 0.5, sin(a) * 0.06),
+			root.add_child(cyl(0.015, 0.06, h, LEAF, Vector3(cos(a) * 0.06, base_y + h * 0.5, sin(a) * 0.06),
 				Vector3(rad_to_deg(sin(a)) * 0.35, 0, -rad_to_deg(cos(a)) * 0.35)))
 		if ripe:
-			root.add_child(cyl(0.16, 0.03, 0.32, CARROT, Vector3(0, 0.0, 0)))
+			root.add_child(sphere(0.21, CARROT, Vector3(0, 0.16, 0), Vector3(1, 1.05, 1)))
+			root.add_child(cyl(0.08, 0.0, 0.18, CARROT, Vector3(0, -0.02, 0)))
+			_face(root, Vector3(0, 0.19, 0.19), 0.07)
+
+
+## Mặt cười dễ thương cho cây đã chín (nhìn về phía camera, +Z).
+static func _face(root: Node3D, center: Vector3, spread: float) -> void:
+	root.add_child(sphere(0.028, DARK, center + Vector3(-spread, 0.02, 0)))
+	root.add_child(sphere(0.028, DARK, center + Vector3(spread, 0.02, 0)))
+	root.add_child(sphere(0.03, Color("f59a9a"), center + Vector3(-spread * 1.6, -0.025, -0.01), Vector3(1.3, 0.7, 0.6)))
+	root.add_child(sphere(0.03, Color("f59a9a"), center + Vector3(spread * 1.6, -0.025, -0.01), Vector3(1.3, 0.7, 0.6)))
+	root.add_child(box(Vector3(0.05, 0.012, 0.02), DARK, center + Vector3(0, -0.035, 0.005)))
 
 
 # ================= Công trình =================
@@ -311,6 +328,64 @@ static func build_tree(rng: RandomNumberGenerator) -> Node3D:
 	r.add_child(cyl(0.15 * s, 0.2 * s, 1.4 * s, WOOD_DARK, Vector3(0, 0.7 * s, 0)))
 	r.add_child(sphere(0.9 * s, LEAF_DARK, Vector3(0, 1.9 * s, 0)))
 	r.add_child(sphere(0.6 * s, LEAF, Vector3(0.35 * s, 2.3 * s, 0.2 * s)))
+	return r
+
+
+static func build_flower_patch(rng: RandomNumberGenerator) -> Node3D:
+	var r := Node3D.new()
+	var palette := [Color("f6a5c0"), Color("ffffff"), Color("ffd166"), Color("c3a6f0"), Color("f28b82")]
+	for k in rng.randi_range(5, 8):
+		var p := Vector3(rng.randf_range(-0.6, 0.6), 0, rng.randf_range(-0.5, 0.5))
+		var h := rng.randf_range(0.18, 0.32)
+		r.add_child(cyl(0.012, 0.012, h, LEAF_DARK, p + Vector3(0, h * 0.5, 0)))
+		var c: Color = palette[rng.randi_range(0, palette.size() - 1)]
+		r.add_child(sphere(0.07, c, p + Vector3(0, h, 0), Vector3(1, 0.6, 1)))
+		r.add_child(sphere(0.03, Color("ffcf4a"), p + Vector3(0, h + 0.035, 0)))
+	for k in 3:
+		r.add_child(sphere(0.12, LEAF, Vector3(rng.randf_range(-0.5, 0.5), 0.05, rng.randf_range(-0.4, 0.4)), Vector3(1, 0.5, 1)))
+	return r
+
+
+static func build_bush(rng: RandomNumberGenerator) -> Node3D:
+	var r := Node3D.new()
+	var s := rng.randf_range(0.8, 1.15)
+	r.add_child(sphere(0.45 * s, LEAF_DARK, Vector3(0, 0.38 * s, 0)))
+	r.add_child(sphere(0.32 * s, LEAF, Vector3(0.28 * s, 0.3 * s, 0.12 * s)))
+	r.add_child(sphere(0.3 * s, LEAF, Vector3(-0.26 * s, 0.28 * s, 0.1 * s)))
+	for k in 4:
+		var a := rng.randf() * TAU
+		r.add_child(sphere(0.05, Color("fbe4ef"), Vector3(cos(a) * 0.38 * s, 0.45 * s, sin(a) * 0.38 * s)))
+	return r
+
+
+static func build_lantern() -> Node3D:
+	var r := Node3D.new()
+	r.add_child(box(Vector3(0.4, 0.12, 0.4), STONE, Vector3(0, 0.06, 0)))
+	r.add_child(cyl(0.05, 0.06, 0.9, DARK, Vector3(0, 0.55, 0)))
+	r.add_child(box(Vector3(0.26, 0.3, 0.26), DARK, Vector3(0, 1.1, 0)))
+	r.add_child(box(Vector3(0.2, 0.24, 0.27), Color("ffe08a"), Vector3(0, 1.1, 0)))
+	r.add_child(prism(Vector3(0.36, 0.16, 0.36), DARK, Vector3(0, 1.33, 0)))
+	return r
+
+
+static func build_stepping_stones(rng: RandomNumberGenerator, count: int) -> Node3D:
+	var r := Node3D.new()
+	for k in count:
+		var p := Vector3(rng.randf_range(-0.9, 0.9), 0.02, rng.randf_range(-0.7, 0.7))
+		r.add_child(cyl(0.26, 0.28, 0.05, STONE, p, Vector3(0, rng.randf() * 90.0, 0)))
+	return r
+
+
+## Hàng rào gỗ thẳng dài `length` dọc trục X.
+static func build_fence_line(length: float) -> Node3D:
+	var r := Node3D.new()
+	var x := -length * 0.5
+	while x <= length * 0.5 + 0.01:
+		r.add_child(box(Vector3(0.16, 0.9, 0.16), WOOD, Vector3(x, 0.45, 0)))
+		r.add_child(prism(Vector3(0.16, 0.1, 0.16), WOOD_DARK, Vector3(x, 0.95, 0)))
+		x += 1.4
+	r.add_child(box(Vector3(length, 0.1, 0.06), WOOD, Vector3(0, 0.62, 0)))
+	r.add_child(box(Vector3(length, 0.1, 0.06), WOOD, Vector3(0, 0.32, 0)))
 	return r
 
 
