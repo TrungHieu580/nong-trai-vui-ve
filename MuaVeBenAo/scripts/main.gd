@@ -64,6 +64,16 @@ var env: Environment
 var _autosave_t := 0.0
 var _last_log := ""
 
+# Camera nhìn xa kiểu game xây làng; lăn chuột / +− / chụm hai ngón để phóng to thu nhỏ.
+const CAM_MIN := 6.0
+const CAM_MAX := 24.0
+var cam: Camera3D
+var cam_dist := 13.0
+var cam_target := 13.0
+var _touches := {}
+var _pinch_start := 0.0
+var _pinch_dist0 := 0.0
+
 
 func _ready() -> void:
 	_setup_input()
@@ -97,6 +107,8 @@ func _setup_input() -> void:
 	_add_action("inventory", [KEY_TAB, KEY_I])
 	_add_action("pause", [KEY_ESCAPE])
 	_add_action("toggle_tutorial", [KEY_H])
+	_add_action("zoom_in", [KEY_EQUAL, KEY_KP_ADD])
+	_add_action("zoom_out", [KEY_MINUS, KEY_KP_SUBTRACT])
 
 
 func _add_action(action: String, keys: Array) -> void:
@@ -117,7 +129,44 @@ func _unhandled_input(event: InputEvent) -> void:
 			ui.close_modal()
 			get_viewport().set_input_as_handled()
 		return
+	# Phóng to / thu nhỏ: con lăn chuột, phím + −, chụm hai ngón (cảm ứng)
+	if event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		zoom_by(0.88 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.14)
+		get_viewport().set_input_as_handled()
+		return
+	if event is InputEventMagnifyGesture:
+		zoom_by(1.0 / maxf(0.2, event.factor))
+		return
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			_touches[event.index] = event.position
+		else:
+			_touches.erase(event.index)
+		if _touches.size() == 2:
+			var pts: Array = _touches.values()
+			_pinch_dist0 = (pts[0] as Vector2).distance_to(pts[1])
+			_pinch_start = cam_target
+		return
+	if event is InputEventScreenDrag:
+		_touches[event.index] = event.position
+		if _touches.size() == 2 and _pinch_dist0 > 10.0:
+			var pts: Array = _touches.values()
+			var d: float = (pts[0] as Vector2).distance_to(pts[1])
+			cam_target = clampf(_pinch_start * _pinch_dist0 / maxf(10.0, d), CAM_MIN, CAM_MAX)
+			player.stop_nav()
+			pending_id = ""
+		return
+	if event.is_action_pressed("zoom_in"):
+		zoom_by(0.85)
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("zoom_out"):
+		zoom_by(1.18)
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if _touches.size() >= 2:
+			return
 		_on_tap(event.position)
 		get_viewport().set_input_as_handled()
 		return
@@ -164,6 +213,9 @@ func _process(delta: float) -> void:
 		ui.refresh_news()
 	player.input_enabled = not busy and not ui.is_modal_open()
 	camera_rig.global_position = camera_rig.global_position.lerp(player.global_position, 1.0 - exp(-6.0 * delta))
+	if absf(cam_dist - cam_target) > 0.01:
+		cam_dist = lerpf(cam_dist, cam_target, 1.0 - exp(-10.0 * delta))
+		_apply_cam()
 	_update_target()
 	if pending_id != "" and not player.has_nav:
 		_do_pending()
@@ -661,12 +713,22 @@ func _spawn_player() -> void:
 	camera_rig = Node3D.new()
 	camera_rig.position = SPAWN_POS
 	add_child(camera_rig)
-	var cam := Camera3D.new()
-	cam.position = Vector3(0, 8.0, 8.0)
-	cam.rotation_degrees = Vector3(-45, 0, 0)
-	cam.fov = 40.0
+	cam = Camera3D.new()
+	cam.rotation_degrees = Vector3(-50, 0, 0)
+	cam.fov = 38.0
+	cam.far = 200.0
 	camera_rig.add_child(cam)
 	cam.current = true
+	_apply_cam()
+
+
+func _apply_cam() -> void:
+	# Góc nhìn chếch ~50°, xa dần khi thu nhỏ
+	cam.position = Vector3(0, cam_dist * 0.77, cam_dist * 0.64)
+
+
+func zoom_by(factor: float) -> void:
+	cam_target = clampf(cam_target * factor, CAM_MIN, CAM_MAX)
 
 
 func _place_player(p: Vector3) -> void:

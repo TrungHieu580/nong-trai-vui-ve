@@ -131,11 +131,11 @@ func _make_theme() -> Theme:
 	fv.base_font = ThemeDB.fallback_font
 	fv.variation_embolden = 0.45
 	t.default_font = fv
-	t.default_font_size = 20
+	t.default_font_size = 16
 	t.set_color("font_color", "Label", INK)
 
 	var panel := _box(CREAM, INK, 4, 26, 6)
-	panel.set_content_margin_all(20)
+	panel.set_content_margin_all(14)
 	t.set_stylebox("panel", "PanelContainer", panel)
 	t.set_type_variation("Pill", "PanelContainer")
 	var pill := _box(CREAM, INK, 3, 40, 3)
@@ -228,7 +228,7 @@ func _button(text: String, cb: Callable, variation: String = "") -> Button:
 	var b := Button.new()
 	b.text = text
 	b.theme_type_variation = variation
-	b.custom_minimum_size.y = 52
+	b.custom_minimum_size.y = 40
 	b.pressed.connect(cb)
 	return b
 
@@ -237,18 +237,21 @@ func _button(text: String, cb: Callable, variation: String = "") -> Button:
 func _icon_button(icon_id: String, caption: String, cb: Callable) -> Array:
 	var b := Button.new()
 	b.theme_type_variation = "Soft"
-	b.custom_minimum_size = Vector2(92, 92)
+	b.custom_minimum_size = Vector2(58, 58)
 	b.focus_mode = Control.FOCUS_NONE
+	b.add_theme_stylebox_override("normal", _box(CREAM, INK, 2, 12, 3))
+	b.add_theme_stylebox_override("hover", _box(Color("fff3dc"), INK, 2, 12, 3))
+	b.add_theme_stylebox_override("pressed", _box(CREAM_DARK, INK, 2, 12, 1))
 	b.pressed.connect(cb)
 	var v := VBoxContainer.new()
-	v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 6)
+	v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 3)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.add_theme_constant_override("separation", 0)
-	var ic = ItemIcon.new(icon_id, 52.0)
+	var ic = ItemIcon.new(icon_id, 32.0)
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	v.add_child(ic)
-	var l := _label(caption, 14)
+	var l := _label(caption, 11)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(l)
 	b.add_child(v)
@@ -289,30 +292,30 @@ func _card(icon_id: String, title: String, price_text: String, badge: String) ->
 	var b := Button.new()
 	b.theme_type_variation = "Card"
 	b.toggle_mode = true
-	b.custom_minimum_size = Vector2(118, 132)
+	b.custom_minimum_size = Vector2(96, 104)
 	var v := VBoxContainer.new()
 	v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 6)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.add_theme_constant_override("separation", 2)
-	var ic = ItemIcon.new(icon_id, 56.0)
+	var ic = ItemIcon.new(icon_id, 42.0)
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	v.add_child(ic)
-	var name_l := _label(title, 15)
+	var name_l := _label(title, 13)
 	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	name_l.custom_minimum_size.x = 104
+	name_l.custom_minimum_size.x = 86
 	v.add_child(name_l)
 	if price_text != "":
 		var pr := HBoxContainer.new()
 		pr.alignment = BoxContainer.ALIGNMENT_CENTER
 		pr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		pr.add_child(ItemIcon.new("coin", 20.0))
-		pr.add_child(_label(price_text, 16))
+		pr.add_child(ItemIcon.new("coin", 16.0))
+		pr.add_child(_label(price_text, 13))
 		v.add_child(pr)
 	b.add_child(v)
 	if badge != "":
-		var bl := _outlined(_label(badge, 15))
+		var bl := _outlined(_label(badge, 12))
 		bl.position = Vector2(8, 2)
 		b.add_child(bl)
 	return b
@@ -326,173 +329,176 @@ func _build_hud() -> void:
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(hud)
 
-	# --- Góc trên trái: ảnh đại diện + ngày ---
-	var profile := HBoxContainer.new()
-	profile.position = Vector2(16, 14)
-	profile.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	profile.add_theme_constant_override("separation", 8)
+	# --- Thanh trên cùng mỏng: ảnh đại diện · ngày giờ · xu · hạt · menu ---
+	var top := PanelContainer.new()
+	top.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	top.offset_left = 8
+	top.offset_right = -8
+	top.offset_top = 6
+	var top_style := _box(Color("fffaf0ee"), INK, 2, 14, 2)
+	top_style.content_margin_top = 3
+	top_style.content_margin_bottom = 3
+	top_style.content_margin_left = 6
+	top_style.content_margin_right = 6
+	top.add_theme_stylebox_override("panel", top_style)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	top.add_child(row)
 	var avatar := PanelContainer.new()
-	avatar.add_theme_stylebox_override("panel", _box(Color("ffe3d3"), INK, 3, 18, 3))
-	avatar.add_child(ItemIcon.new("farmer", 64.0))
-	profile.add_child(avatar)
-	var pv := VBoxContainer.new()
-	pv.add_theme_constant_override("separation", 4)
-	var name_pill := PanelContainer.new()
-	name_pill.theme_type_variation = "Pill"
-	name_pill.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	name_pill.add_child(_label("Nông trại của bạn", 16))
-	pv.add_child(name_pill)
-	var bar_box := Control.new()
-	bar_box.custom_minimum_size = Vector2(190, 30)
+	var av_style := _box(Color("ffe3d3"), INK, 2, 10, 0)
+	av_style.set_content_margin_all(1)
+	avatar.add_theme_stylebox_override("panel", av_style)
+	avatar.add_child(ItemIcon.new("farmer", 34.0))
+	row.add_child(avatar)
+	var dv := VBoxContainer.new()
+	dv.add_theme_constant_override("separation", 1)
+	dv.alignment = BoxContainer.ALIGNMENT_CENTER
+	day_label = _label("", 14)
+	dv.add_child(day_label)
 	day_bar = ProgressBar.new()
 	day_bar.show_percentage = false
-	day_bar.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bar_box.add_child(day_bar)
-	day_label = _label("", 16)
-	day_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	day_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	day_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	bar_box.add_child(day_label)
-	pv.add_child(bar_box)
-	profile.add_child(pv)
-	hud.add_child(profile)
+	day_bar.custom_minimum_size = Vector2(170, 7)
+	var bar_bg := _box(Color("e9f3ef"), INK, 1, 4, 0)
+	bar_bg.set_content_margin_all(0)
+	var bar_fill := _box(XP, INK, 0, 4, 0)
+	bar_fill.set_content_margin_all(0)
+	day_bar.add_theme_stylebox_override("background", bar_bg)
+	day_bar.add_theme_stylebox_override("fill", bar_fill)
+	dv.add_child(day_bar)
+	row.add_child(dv)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(spacer)
+	row.add_child(ItemIcon.new("coin", 22.0))
+	coin_label = _label("0", 16)
+	coin_label.custom_minimum_size.x = 44
+	row.add_child(coin_label)
+	seed_pill_icon = ItemIcon.new("seed_leafy_greens", 22.0)
+	row.add_child(seed_pill_icon)
+	seed_pill_label = _label("", 16)
+	seed_pill_label.custom_minimum_size.x = 36
+	row.add_child(seed_pill_label)
+	var menu_b := Button.new()
+	menu_b.theme_type_variation = "Soft"
+	menu_b.custom_minimum_size = Vector2(38, 32)
+	menu_b.focus_mode = Control.FOCUS_NONE
+	menu_b.add_theme_stylebox_override("normal", _box(CREAM, INK, 2, 10, 2))
+	menu_b.pressed.connect(_on_menu_button)
+	var mi = ItemIcon.new("menu", 22.0)
+	mi.size = Vector2(22, 22)
+	mi.position = Vector2(8, 5)
+	menu_b.add_child(mi)
+	row.add_child(menu_b)
+	hud.add_child(top)
 
-	# --- Bảng tin làng (dưới ảnh đại diện) ---
+	# --- Hướng dẫn nhỏ, góc phải dưới thanh trên ---
+	tutorial_panel = PanelContainer.new()
+	tutorial_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	tutorial_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	tutorial_panel.offset_left = -8
+	tutorial_panel.offset_right = -8
+	tutorial_panel.offset_top = 54
+	tutorial_panel.custom_minimum_size = Vector2(250, 0)
+	tutorial_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tut_style := _box(Color("fffaf0e0"), INK, 2, 12, 2)
+	tut_style.set_content_margin_all(8)
+	tutorial_panel.add_theme_stylebox_override("panel", tut_style)
+	tutorial_label = _label("", 13)
+	tutorial_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tutorial_panel.add_child(tutorial_label)
+	hud.add_child(tutorial_panel)
+
+	# --- Tin làng thu gọn, góc dưới trái ---
 	news_panel = PanelContainer.new()
-	news_panel.position = Vector2(16, 100)
-	news_panel.custom_minimum_size = Vector2(340, 0)
+	news_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	news_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	news_panel.offset_left = 8
+	news_panel.offset_top = -8
+	news_panel.offset_bottom = -8
+	news_panel.custom_minimum_size = Vector2(280, 0)
 	news_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	news_panel.add_theme_stylebox_override("panel", _box(Color("fffaf0dd"), INK, 2, 14, 2))
+	var news_style := _box(Color("fffaf0cc"), INK, 1, 10, 0)
+	news_style.set_content_margin_all(6)
+	news_panel.add_theme_stylebox_override("panel", news_style)
 	var nv := VBoxContainer.new()
-	nv.add_theme_constant_override("separation", 1)
-	nv.add_child(_label("Tin làng", 15))
+	nv.add_theme_constant_override("separation", 0)
+	nv.add_child(_label("Tin làng", 12))
 	for k in 3:
-		var nl := _label("", 13)
+		var nl := _label("", 11)
 		nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		nl.custom_minimum_size.x = 316
+		nl.custom_minimum_size.x = 266
 		nl.modulate.a = 1.0 - 0.25 * k
 		nv.add_child(nl)
 		news_labels.append(nl)
 	news_panel.add_child(nv)
 	hud.add_child(news_panel)
 
-	# --- Góc trên phải: xu + hạt đang cầm + menu ---
-	var top_right := HBoxContainer.new()
-	top_right.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	top_right.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	top_right.offset_left = -16
-	top_right.offset_right = -16
-	top_right.offset_top = 16
-	top_right.add_theme_constant_override("separation", 10)
-	top_right.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var coin_pill := PanelContainer.new()
-	coin_pill.theme_type_variation = "Pill"
-	var ch := HBoxContainer.new()
-	coin_label = _label("0", 22)
-	coin_label.custom_minimum_size.x = 64
-	coin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	ch.add_child(coin_label)
-	ch.add_child(ItemIcon.new("coin", 34.0))
-	coin_pill.add_child(ch)
-	top_right.add_child(coin_pill)
-	var seed_pill := PanelContainer.new()
-	seed_pill.theme_type_variation = "Pill"
-	var sh := HBoxContainer.new()
-	seed_pill_label = _label("", 20)
-	sh.add_child(seed_pill_label)
-	seed_pill_icon = ItemIcon.new("seed_leafy_greens", 34.0)
-	sh.add_child(seed_pill_icon)
-	seed_pill.add_child(sh)
-	top_right.add_child(seed_pill)
-	var menu_b := Button.new()
-	menu_b.theme_type_variation = "Accent"
-	menu_b.custom_minimum_size = Vector2(56, 52)
-	menu_b.focus_mode = Control.FOCUS_NONE
-	menu_b.pressed.connect(_on_menu_button)
-	var mi = ItemIcon.new("menu", 34.0)
-	mi.size = Vector2(34, 34)
-	mi.position = Vector2(11, 7)
-	menu_b.add_child(mi)
-	top_right.add_child(menu_b)
-	hud.add_child(top_right)
-
-	tutorial_panel = PanelContainer.new()
-	tutorial_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	tutorial_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	tutorial_panel.offset_left = -16
-	tutorial_panel.offset_right = -16
-	tutorial_panel.offset_top = 84
-	tutorial_panel.custom_minimum_size = Vector2(330, 0)
-	tutorial_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tutorial_panel.add_theme_stylebox_override("panel", _box(Color("fffaf0e8"), INK, 3, 18, 3))
-	tutorial_label = _label("", 16)
-	tutorial_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	tutorial_panel.add_child(tutorial_label)
-	hud.add_child(tutorial_panel)
-
-	# --- Góc dưới trái: túi đồ + đổi hạt ---
-	var bottom_left := VBoxContainer.new()
-	bottom_left.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	bottom_left.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	bottom_left.offset_left = 16
-	bottom_left.offset_top = -16
-	bottom_left.offset_bottom = -16
-	bottom_left.add_theme_constant_override("separation", 10)
-	bottom_left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# --- Thanh công cụ nhỏ, góc dưới phải: túi đồ · đổi hạt · nút hành động ---
+	var tools := HBoxContainer.new()
+	tools.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	tools.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	tools.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	tools.offset_left = -8
+	tools.offset_right = -8
+	tools.offset_top = -8
+	tools.offset_bottom = -8
+	tools.alignment = BoxContainer.ALIGNMENT_END
+	tools.add_theme_constant_override("separation", 6)
+	tools.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var bag: Array = _icon_button("bag", "Túi đồ", _on_bag_button)
-	bottom_left.add_child(bag[0])
+	bag[0].size_flags_vertical = Control.SIZE_SHRINK_END
+	tools.add_child(bag[0])
 	var seed: Array = _icon_button("seed_leafy_greens", "Đổi hạt", _on_seed_button)
 	seed_btn_icon = seed[1]
-	bottom_left.add_child(seed[0])
-	hud.add_child(bottom_left)
-
-	# --- Góc dưới phải: nút hành động lớn ---
+	seed[0].size_flags_vertical = Control.SIZE_SHRINK_END
+	tools.add_child(seed[0])
 	action_btn = Button.new()
 	action_btn.theme_type_variation = "Accent"
-	action_btn.custom_minimum_size = Vector2(118, 118)
-	action_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	action_btn.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	action_btn.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	action_btn.offset_left = -16
-	action_btn.offset_right = -16
-	action_btn.offset_top = -16
-	action_btn.offset_bottom = -16
+	action_btn.custom_minimum_size = Vector2(72, 72)
 	action_btn.focus_mode = Control.FOCUS_NONE
-	action_btn.add_theme_stylebox_override("normal", _box(ORANGE, INK, 4, 59, 6))
-	action_btn.add_theme_stylebox_override("hover", _box(ORANGE_HI, INK, 4, 59, 6))
-	action_btn.add_theme_stylebox_override("pressed", _box(Color("e08a45"), INK, 4, 59, 1))
-	action_btn.add_theme_stylebox_override("disabled", _box(Color("e6ddcf"), Color("a89c88"), 4, 59, 0))
+	action_btn.add_theme_stylebox_override("normal", _box(ORANGE, INK, 3, 36, 4))
+	action_btn.add_theme_stylebox_override("hover", _box(ORANGE_HI, INK, 3, 36, 4))
+	action_btn.add_theme_stylebox_override("pressed", _box(Color("e08a45"), INK, 3, 36, 1))
+	action_btn.add_theme_stylebox_override("disabled", _box(Color("e6ddcf"), Color("a89c88"), 3, 36, 0))
 	action_btn.pressed.connect(_on_action_button)
-	action_label = _outlined(_label("", 22))
+	action_label = _outlined(_label("", 15))
+	action_label.add_theme_constant_override("outline_size", 5)
 	action_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	action_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	action_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	action_btn.add_child(action_label)
-	hud.add_child(action_btn)
+	tools.add_child(action_btn)
+	hud.add_child(tools)
 
 	# --- Giữa dưới: thông báo + lời nhắc ---
 	var bottom := VBoxContainer.new()
 	bottom.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	bottom.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	bottom.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	bottom.offset_top = -14
-	bottom.offset_bottom = -14
+	bottom.offset_top = -8
+	bottom.offset_bottom = -8
 	bottom.alignment = BoxContainer.ALIGNMENT_END
 	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bottom.add_theme_constant_override("separation", 8)
+	bottom.add_theme_constant_override("separation", 4)
 	hud.add_child(bottom)
-	toast_label = _outlined(_label("", 20))
+	toast_label = _outlined(_label("", 15))
+	toast_label.add_theme_constant_override("outline_size", 5)
 	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	toast_label.modulate.a = 0.0
 	bottom.add_child(toast_label)
 	prompt_panel = PanelContainer.new()
-	prompt_panel.theme_type_variation = "Pill"
+	var pr_style := _box(Color("fffaf0ee"), INK, 2, 12, 2)
+	pr_style.content_margin_top = 3
+	pr_style.content_margin_bottom = 3
+	prompt_panel.add_theme_stylebox_override("panel", pr_style)
 	prompt_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	prompt_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	prompt_label = _label("", 18)
+	prompt_label = _label("", 14)
 	prompt_panel.add_child(prompt_label)
 	bottom.add_child(prompt_panel)
-	key_hint = _outlined(_label("WASD/chạm để đi · E làm việc · Tab túi đồ · 1/2 chọn hạt · H hướng dẫn · Esc menu", 13))
+	key_hint = _outlined(_label("WASD/chạm: đi · E: làm · Lăn chuột/+−: phóng to · Tab: túi · 1/2: hạt · H: hướng dẫn · Esc: menu", 11))
+	key_hint.add_theme_constant_override("outline_size", 4)
 	key_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	key_hint.visible = not DisplayServer.is_touchscreen_available()
 	bottom.add_child(key_hint)
@@ -625,14 +631,14 @@ func close_modal() -> void:
 
 func _close_button() -> Button:
 	var b := _button("X", close_modal, "Danger")
-	b.custom_minimum_size = Vector2(52, 52)
+	b.custom_minimum_size = Vector2(38, 36)
 	return b
 
 
 func _header(title: String, extra: Control) -> HBoxContainer:
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 12)
-	var t := _title(title, 30)
+	var t := _title(title, 22)
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(t)
 	if extra:
@@ -652,12 +658,12 @@ func _build_market() -> void:
 	var coin_pill := PanelContainer.new()
 	coin_pill.theme_type_variation = "Pill"
 	var ch := HBoxContainer.new()
-	market_coin_label = _label("", 22)
+	market_coin_label = _label("", 16)
 	ch.add_child(market_coin_label)
-	ch.add_child(ItemIcon.new("coin", 30.0))
+	ch.add_child(ItemIcon.new("coin", 22.0))
 	coin_pill.add_child(ch)
 	v.add_child(_header("Quầy chợ làng", coin_pill))
-	market_demand = _label("", 16)
+	market_demand = _label("", 13)
 	market_demand.add_theme_color_override("font_color", Color("b8661a"))
 	v.add_child(market_demand)
 
@@ -670,7 +676,7 @@ func _build_market() -> void:
 		b.toggle_mode = true
 		b.button_group = tg
 		b.theme_type_variation = "Tab"
-		b.custom_minimum_size = Vector2(140, 46)
+		b.custom_minimum_size = Vector2(110, 34)
 		var key: String = t[0]
 		b.pressed.connect(func(): _switch_tab(key))
 		tabs.add_child(b)
@@ -680,10 +686,10 @@ func _build_market() -> void:
 	var body := HBoxContainer.new()
 	body.add_theme_constant_override("separation", 14)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(530, 300)
+	scroll.custom_minimum_size = Vector2(540, 270)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	market_grid = GridContainer.new()
-	market_grid.columns = 4
+	market_grid.columns = 5
 	market_grid.add_theme_constant_override("h_separation", 10)
 	market_grid.add_theme_constant_override("v_separation", 10)
 	scroll.add_child(market_grid)
@@ -691,44 +697,44 @@ func _build_market() -> void:
 
 	var det := PanelContainer.new()
 	det.theme_type_variation = "Inset"
-	det.custom_minimum_size = Vector2(300, 300)
+	det.custom_minimum_size = Vector2(250, 270)
 	var dv := VBoxContainer.new()
 	dv.add_theme_constant_override("separation", 6)
-	detail_icon = ItemIcon.new("", 76.0)
+	detail_icon = ItemIcon.new("", 54.0)
 	detail_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	dv.add_child(detail_icon)
-	detail_name = _title("", 22)
+	detail_name = _title("", 17)
 	detail_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	dv.add_child(detail_name)
-	detail_desc = _label("", 15)
+	detail_desc = _label("", 13)
 	detail_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	detail_desc.custom_minimum_size.x = 268
+	detail_desc.custom_minimum_size.x = 222
 	dv.add_child(detail_desc)
-	detail_price = _label("", 17)
+	detail_price = _label("", 14)
 	dv.add_child(detail_price)
 	qty_row = HBoxContainer.new()
 	qty_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	qty_row.add_theme_constant_override("separation", 6)
 	var minus := _button("-", func(): _change_qty(-1), "Soft")
-	minus.custom_minimum_size = Vector2(52, 46)
+	minus.custom_minimum_size = Vector2(38, 32)
 	qty_row.add_child(minus)
-	qty_label = _label("1", 22)
-	qty_label.custom_minimum_size.x = 54
+	qty_label = _label("1", 17)
+	qty_label.custom_minimum_size.x = 40
 	qty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	qty_row.add_child(qty_label)
 	var plus := _button("+", func(): _change_qty(1), "Soft")
-	plus.custom_minimum_size = Vector2(52, 46)
+	plus.custom_minimum_size = Vector2(38, 32)
 	qty_row.add_child(plus)
 	var mx := _button("Tối đa", _max_qty, "Soft")
-	mx.custom_minimum_size = Vector2(80, 46)
+	mx.custom_minimum_size = Vector2(64, 32)
 	qty_row.add_child(mx)
 	dv.add_child(qty_row)
-	detail_total = _label("", 16)
+	detail_total = _label("", 13)
 	detail_total.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	dv.add_child(detail_total)
 	detail_action = _button("Mua", _on_detail_action, "Accent")
 	dv.add_child(detail_action)
-	detail_msg = _label("", 15)
+	detail_msg = _label("", 13)
 	detail_msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	dv.add_child(detail_msg)
 	det.add_child(dv)
@@ -922,28 +928,28 @@ func _build_inventory() -> void:
 	var body := HBoxContainer.new()
 	body.add_theme_constant_override("separation", 14)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(530, 290)
+	scroll.custom_minimum_size = Vector2(540, 260)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	inv_grid = GridContainer.new()
-	inv_grid.columns = 4
+	inv_grid.columns = 5
 	inv_grid.add_theme_constant_override("h_separation", 10)
 	inv_grid.add_theme_constant_override("v_separation", 10)
 	scroll.add_child(inv_grid)
 	body.add_child(scroll)
 	var det := PanelContainer.new()
 	det.theme_type_variation = "Inset"
-	det.custom_minimum_size = Vector2(280, 290)
+	det.custom_minimum_size = Vector2(240, 260)
 	var dv := VBoxContainer.new()
 	dv.add_theme_constant_override("separation", 8)
-	inv_icon = ItemIcon.new("", 80.0)
+	inv_icon = ItemIcon.new("", 56.0)
 	inv_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	dv.add_child(inv_icon)
-	inv_name = _title("", 22)
+	inv_name = _title("", 17)
 	inv_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	dv.add_child(inv_name)
-	inv_desc = _label("", 15)
+	inv_desc = _label("", 13)
 	inv_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	inv_desc.custom_minimum_size.x = 250
+	inv_desc.custom_minimum_size.x = 212
 	dv.add_child(inv_desc)
 	inv_use = _button("Cầm theo", _on_inv_use, "Accent")
 	dv.add_child(inv_use)
@@ -1004,11 +1010,11 @@ func _build_summary() -> void:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 14)
 	frame.add_child(v)
-	var t := _title("Một ngày mới!", 32)
+	var t := _title("Một ngày mới!", 24)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(t)
-	summary_label = _label("", 18)
-	summary_label.custom_minimum_size = Vector2(480, 0)
+	summary_label = _label("", 15)
+	summary_label.custom_minimum_size = Vector2(400, 0)
 	summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(summary_label)
 	summary_ok = _button("Bắt đầu ngày mới", close_modal, "Accent")
@@ -1028,9 +1034,9 @@ func _build_pause() -> void:
 	var frame := PanelContainer.new()
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
-	v.custom_minimum_size = Vector2(320, 0)
+	v.custom_minimum_size = Vector2(260, 0)
 	frame.add_child(v)
-	var t := _title("Tạm nghỉ", 32)
+	var t := _title("Tạm nghỉ", 24)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(t)
 	pause_first = _button("Chơi tiếp", close_modal, "Accent")
@@ -1069,12 +1075,12 @@ func _build_menu() -> void:
 	var frame := PanelContainer.new()
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
-	v.custom_minimum_size = Vector2(420, 0)
+	v.custom_minimum_size = Vector2(340, 0)
 	frame.add_child(v)
-	var logo = ItemIcon.new("farmer", 96.0)
+	var logo = ItemIcon.new("farmer", 72.0)
 	logo.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	v.add_child(logo)
-	var title := _title("Mùa Về Bên Ao", 42)
+	var title := _title("Mùa Về Bên Ao", 32)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(title)
 	var sub := _label("Bản chơi thử %s · nông trại làng quê" % GameData.GAME_VERSION, 16)
@@ -1097,9 +1103,9 @@ func _build_confirm() -> void:
 	var frame := PanelContainer.new()
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 14)
-	v.custom_minimum_size = Vector2(440, 0)
+	v.custom_minimum_size = Vector2(360, 0)
 	frame.add_child(v)
-	v.add_child(_title("Chơi lại từ đầu?", 28))
+	v.add_child(_title("Chơi lại từ đầu?", 22))
 	var l := _label("Bạn đang có một nông trại đã lưu. Chơi mới sẽ xoá toàn bộ tiến độ đó.", 17)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(l)
