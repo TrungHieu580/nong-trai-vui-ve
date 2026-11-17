@@ -99,7 +99,7 @@ static func label(text: String, pos: Vector3, font_px: int = 40) -> Label3D:
 	l.no_depth_test = true
 	l.font_size = font_px
 	l.outline_size = 14
-	l.pixel_size = 0.006
+	l.pixel_size = 0.008
 	l.modulate = COLOR_INFO
 	l.outline_modulate = Color(0.1, 0.07, 0.05, 0.85)
 	return l

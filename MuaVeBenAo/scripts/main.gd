@@ -179,15 +179,16 @@ func _build_environment() -> void:
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color("bfe3f2")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("fff4e0")
-	env.ambient_light_energy = 0.6
+	env.ambient_light_color = Color("dfe8f0")
+	# Bản Web dùng trình kết xuất Compatibility, cảnh sáng hơn bản PC nên giảm ánh sáng.
+	env.ambient_light_energy = 0.3
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-55, -35, 0)
-	sun.light_energy = 1.1
+	sun.light_energy = 0.7
 	sun.light_color = Color("fff1d6")
 	sun.shadow_enabled = true
 	add_child(sun)
