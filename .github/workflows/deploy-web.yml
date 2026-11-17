@@ -1,0 +1,92 @@
+# Tự động: tải Godot → kiểm thử → xuất bản Web → đăng lên GitHub Pages.
+# Chạy mỗi khi đẩy code lên nhánh main, hoặc bấm "Run workflow" trong tab Actions.
+name: Build & Deploy Web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.7.2"
+  PROJECT_DIR: MuaVeBenAo
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-web
+
+      - name: Install Godot + Web templates
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          base="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
+          tdir="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p ~/godot "$tdir"
+          cd ~/godot
+          wget -q "$base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q "Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" godot
+          rm -f *.zip
+          wget -q "$base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          unzip -q "Godot_v${GODOT_VERSION}-stable_export_templates.tpz" 'templates/web*' 'templates/version.txt'
+          mv templates/* "$tdir/"
+          rm -rf templates *.tpz
+          ls -la "$tdir"
+
+      - name: Import project
+        run: timeout 300 ~/godot/godot --headless --path "$PROJECT_DIR" --import
+
+      - name: Run tests
+        run: timeout 120 ~/godot/godot --headless --path "$PROJECT_DIR" -s res://tests/run_tests.gd
+
+      - name: Smoke test main scene
+        run: |
+          timeout 120 ~/godot/godot --headless --path "$PROJECT_DIR" --quit-after 120 2>&1 | tee smoke.log
+          if grep -E "SCRIPT ERROR|Parse Error|Failed to load script" smoke.log; then
+            echo "::error::Main scene has script errors"
+            exit 1
+          fi
+
+      - name: Export Web
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/build/web"
+          timeout 300 ~/godot/godot --headless --path "$PROJECT_DIR" --export-release "Web" "$GITHUB_WORKSPACE/build/web/index.html"
+          ls -la "$GITHUB_WORKSPACE/build/web"
+          test -f "$GITHUB_WORKSPACE/build/web/index.html"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
