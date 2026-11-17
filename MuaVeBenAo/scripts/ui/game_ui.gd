@@ -610,7 +610,7 @@ func _build_menu() -> void:
 	var title := _label("Mùa Về Bên Ao", 44)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(title)
-	var sub := _label("Bản chơi thử – nông trại làng quê", 18)
+	var sub := _label("Bản chơi thử %s – nông trại làng quê" % GameData.GAME_VERSION, 18)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(sub)
 	menu_continue = _button("Tiếp tục", _on_continue)

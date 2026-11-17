@@ -578,10 +578,10 @@ func _interact_pond() -> void:
 func _apply(r: Dictionary, action: String) -> Dictionary:
 	if r["ok"]:
 		_advance_tutorial(action)
-		_save()
 		refresh_all()
 		player.play_action()
 		ui.toast(r["msg"], true)
+		_save()  # Gọi sau toast để thông báo lỗi lưu (nếu có) không bị che.
 	else:
 		ui.toast(r["msg"], false)
 	return r

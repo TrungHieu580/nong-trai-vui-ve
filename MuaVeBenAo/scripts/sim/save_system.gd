@@ -38,6 +38,14 @@ func save(state) -> String:
 	if problem != "":
 		return "Kiểm tra tệp lưu thất bại: %s Bản lưu cũ được giữ nguyên." % problem
 
+	if OS.has_feature("web"):
+		# Trên trình duyệt, user:// nằm trong IndexedDB và chỉ được đồng bộ khi
+		# đóng tệp. Đổi tên/xoá tệp không kích hoạt đồng bộ, nên ghi trực tiếp.
+		var werr := _write_text(main_path, text)
+		if werr != "":
+			return werr
+		return _write_text(bak_path, text)
+
 	var g_main := ProjectSettings.globalize_path(main_path)
 	var g_tmp := ProjectSettings.globalize_path(tmp_path)
 	var g_bak := ProjectSettings.globalize_path(bak_path)
@@ -70,6 +78,15 @@ func load_game() -> Dictionary:
 			return {"ok": true, "state": st, "msg": msg}
 		notes.append("%s: %s" % [label, err])
 	return {"ok": false, "state": null, "msg": "Không tải được bản lưu – " + "; ".join(notes) + ". Tệp vẫn được giữ nguyên."}
+
+
+static func _write_text(path: String, text: String) -> String:
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		return "Không ghi được tệp lưu (%s)." % error_string(FileAccess.get_open_error())
+	f.store_string(text)
+	f.close()
+	return ""
 
 
 static func read_json(path: String):
